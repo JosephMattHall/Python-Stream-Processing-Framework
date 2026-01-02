@@ -22,7 +22,11 @@ pspf/
 ├── tests/
 │   ├── test_operators.py
 │   └── test_runtime.py
+├── docs/
+│   ├── architecture.md
+│   └── project-structure.md
+│   └── contributing.md
+│   └──roadmap.md
 ├── README.md
-├── CONTRIBUTING.md
 ├── pyproject.toml
 └── LICENSE
