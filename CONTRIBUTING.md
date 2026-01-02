@@ -61,46 +61,6 @@ Be respectful, collaborative, and constructive. PSPF is intended to be a welcomi
 📜 License
 By contributing, you agree your changes are licensed under the project license.
 
-yaml
-Copy code
 
----
 
-## 🧩 **Architecture Overview (diagram + notes)**
-
-### **High‑Level Architecture**
-
-```text
-┌──────────┐     ┌──────────┐     ┌───────────────┐     ┌──────────┐
-│ Sources   │ →→ │ Pipeline │ →→ │ State / Store  │ →→ │ Sinks     │
-│ (Kafka,   │     │ Operators│     │ (per‑key, op) │     │ (Kafka,  │
-│ MQTT, etc)│     │ map/agg  │     │ + checkpoints │     │ DB, HTTP)│
-└──────────┘     └──────────┘     └───────────────┘     └──────────┘
-                         │
-                         ↓
-                 ┌────────────────┐
-                 │ Runtime Runner │
-                 │ local / dist   │
-                 └────────────────┘
-Core Components
-Connectors — ingest & emit events
-
-Operators — transformations (map, filter, window, reduce…)
-
-Runtime — executes pipelines, manages concurrency & backpressure
-
-State Stores — pluggable (memory / disk / external)
-
-Checkpointing — durable recovery snapshots
-
-CLI — run pipelines, inspect topology (planned)
-
-Execution Model (current focus)
-Async Python runtime (asyncio)
-
-Cooperative scheduling
-
-Deterministic local runner
-
-Distributed runner planned as extension
 
