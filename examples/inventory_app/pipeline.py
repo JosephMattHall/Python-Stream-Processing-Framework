@@ -36,9 +36,7 @@ class InventoryProcessor:
 
         # 2. Parse Event
         try:
-            event_data = record.value
-            event_type = event_data.get("event_type")
-            event = self._parse_event(event_data)
+            event = self._parse_event(record)
         except Exception as e:
             # Log error and skip bad records
             print(f"Failed to parse event {record.id}: {e}")
@@ -78,6 +76,7 @@ class InventoryProcessor:
                     id=rejection_id,
                     key=rejection.item_id,
                     value=self._serialize_event(rejection),
+                    event_type="CheckoutRejected",
                     timestamp=datetime.now(timezone.utc)
                 )
                 
@@ -98,20 +97,83 @@ class InventoryProcessor:
         # 5. Mark Processed
         await self.dedup_store.mark_processed(record.id)
 
-    def _parse_event(self, data: dict) -> Optional[InventoryEvent]:
-        # Simple parser mapping
-        mapping = {
-            "ITEM_CREATED": ItemCreated,
-            "ITEM_CHECKED_IN": ItemCheckedIn,
-            "ITEM_CHECKED_OUT": ItemCheckedOut,
-            "CHECKOUT_REJECTED": CheckoutRejected
-        }
-        cls = mapping.get(data.get("event_type"))
-        if cls:
-            # filter args based on cls (simple dict unpacking might fail if extra fields)
-            # kept simple for MVP
-            return cls(**data)
+    def _parse_event(self, record: StreamRecord) -> Optional[InventoryEvent]:
+        # Map event_type string to Protobuf Class
+        from protos import inventory_pb2
+        
+        event_type = getattr(record, "event_type", "")
+        if not event_type:
+             # Fallback for old records without type?
+             return None
+             
+        try:
+            if event_type == "ItemCreated":
+                proto = inventory_pb2.ItemCreated()
+                proto.ParseFromString(record.value)
+                # Map to Domain Class
+                return ItemCreated(
+                    event_type="ITEM_CREATED",
+                    item_id=proto.item_id,
+                    timestamp=record.timestamp.isoformat(),
+                    name=proto.name,
+                    initial_qty=0 # Handled by separate checkin if needed
+                )
+                
+            elif event_type == "ItemCheckedIn":
+                proto = inventory_pb2.ItemCheckedIn()
+                proto.ParseFromString(record.value)
+                return ItemCheckedIn(
+                    event_type="ITEM_CHECKED_IN",
+                    item_id=proto.item_id,
+                    timestamp=record.timestamp.isoformat(),
+                    qty=proto.qty,
+                    user_id=proto.user_id
+                )
+                
+            elif event_type == "ItemCheckedOut":
+                proto = inventory_pb2.ItemCheckedOut()
+                proto.ParseFromString(record.value)
+                return ItemCheckedOut(
+                    event_type="ITEM_CHECKED_OUT",
+                    item_id=proto.item_id,
+                    timestamp=record.timestamp.isoformat(),
+                    qty=proto.qty,
+                    user_id=proto.user_id,
+                    request_id=record.id # Use record ID as request ID
+                )
+                
+            elif event_type == "CheckoutRejected":
+                proto = inventory_pb2.CheckoutRejected()
+                proto.ParseFromString(record.value)
+                return CheckoutRejected(
+                    event_type="CHECKOUT_REJECTED",
+                    item_id=proto.item_id,
+                    timestamp=record.timestamp.isoformat(),
+                    qty=proto.requested_qty,
+                    user_id="system",
+                    reason=proto.reason,
+                    request_id=record.id
+                )
+                
+        except Exception as e:
+            print(f"Protobuf Parse Error ({event_type}): {e}")
+            return None
+            
         return None
 
-    def _serialize_event(self, event: InventoryEvent) -> dict:
-        return event.__dict__
+    def _serialize_event(self, event: InventoryEvent) -> bytes:
+        # Inverse: Domain -> Protobuf -> Bytes
+        # Used for emitting compensation events (CheckoutRejected)
+        from protos import inventory_pb2
+        
+        if isinstance(event, CheckoutRejected):
+            proto = inventory_pb2.CheckoutRejected(
+                item_id=event.item_id,
+                requested_qty=event.qty,
+                available_qty=0, # TODO: Pass available
+                reason=event.reason
+            )
+            return proto.SerializeToString()
+        
+        # Add others if pipeline needs to emit them
+        return b""

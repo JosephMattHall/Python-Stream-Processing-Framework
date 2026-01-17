@@ -11,6 +11,7 @@ class StreamRecord:
     id: str                  # Unique Event ID (UUID)
     key: str                 # Partition key
     value: Any               # Event payload
+    event_type: str          # Event Type (e.g. "ItemCreated")
     timestamp: datetime      # Event time
     partition: Optional[int] = None
     offset: Optional[int] = None

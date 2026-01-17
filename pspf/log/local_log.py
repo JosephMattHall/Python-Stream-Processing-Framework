@@ -79,6 +79,7 @@ class LocalLog(Log):
                 "id": record.id,
                 "key": record.key,
                 "value": record.value,
+                "event_type": getattr(record, "event_type", ""),
                 "timestamp": record.timestamp.isoformat(),
                 "partition": partition,
                 "offset": offset
@@ -128,6 +129,7 @@ class LocalLog(Log):
                             id=data["id"],
                             key=data["key"],
                             value=data["value"],
+                            event_type=data.get("event_type", ""),
                             timestamp=datetime.fromisoformat(data["timestamp"]),
                             partition=data["partition"],
                             offset=data["offset"]
