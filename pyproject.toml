@@ -23,7 +23,7 @@ dependencies = [
     "uvicorn>=0.20.0",
     "aiofiles>=23.0.0",
     "msgpack>=1.0.0",
-    "redis>=5.0.0",
+    "valkey>=5.0.0",
     "protobuf>=4.0.0",
 ]
 

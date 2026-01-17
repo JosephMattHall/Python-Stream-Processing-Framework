@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class PartitionLeaseManager:
     """
-    Manages distributed leases for partitions using Redis.
+    Manages distributed leases for partitions using Valkey.
     Ensures only one consumer processes a partition at a time.
     """
     def __init__(self, 
@@ -16,8 +16,8 @@ class PartitionLeaseManager:
                  host: str = 'localhost', 
                  port: int = 6379, 
                  lease_ttl_s: int = 10):
-        import redis.asyncio as aioredis
-        self.redis = aioredis.Redis(host=host, port=port, decode_responses=True)
+        import valkey.asyncio as valkey
+        self.valkey = valkey.Valkey(host=host, port=port, decode_responses=True)
         self.service_name = service_name
         self.worker_id = str(uuid.uuid4())
         self.lease_ttl = lease_ttl_s
@@ -32,14 +32,14 @@ class PartitionLeaseManager:
         now = time.time()
         
         # 1. Check owner
-        owner = await self.redis.get(key)
+        owner = await self.valkey.get(key)
         if owner == self.worker_id:
             # We own it, renew
-            await self.redis.expire(key, self.lease_ttl)
+            await self.valkey.expire(key, self.lease_ttl)
             return True
             
         # 2. Try to acquire (SET NX EX)
-        acquired = await self.redis.set(key, self.worker_id, ex=self.lease_ttl, nx=True)
+        acquired = await self.valkey.set(key, self.worker_id, ex=self.lease_ttl, nx=True)
         return bool(acquired)
 
     async def renew(self, partition: int) -> bool:
@@ -55,7 +55,8 @@ class PartitionLeaseManager:
             return 0
         end
         """
-        result = await self.redis.eval(script, 1, key, self.worker_id, self.lease_ttl)
+        # Note: 'redis.call' works in Valkey too as it maintains Lua compatibility
+        result = await self.valkey.eval(script, 1, key, self.worker_id, self.lease_ttl)
         return bool(result)
 
     async def release(self, partition: int):
@@ -68,4 +69,4 @@ class PartitionLeaseManager:
             return 0
         end
         """
-        await self.redis.eval(script, 1, key, self.worker_id)
+        await self.valkey.eval(script, 1, key, self.worker_id)
