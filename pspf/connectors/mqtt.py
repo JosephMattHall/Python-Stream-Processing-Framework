@@ -3,7 +3,6 @@ from typing import List, Optional
 from pspf.connectors.base import Source
 
 class MQTTSource(Source[str]):
-    """Simulated MQTT source."""
 
     def __init__(self, topic: str, host: str, port: int = 1883, msg_limit: Optional[int] = 5):
         super().__init__(name=f"MQTTSource({topic})")

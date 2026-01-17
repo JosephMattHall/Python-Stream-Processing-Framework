@@ -12,13 +12,13 @@ class ValkeyOffsetStore(OffsetStore):
         self.valkey = valkey.Valkey(host=host, port=port, decode_responses=True)
         self.prefix = prefix
 
-    async def get_offset(self, consumer_group: str, partition: int) -> Optional[int]:
-        key = f"{self.prefix}:{consumer_group}"
+    async def get(self, consumer_id: str, partition: int) -> int:
+        key = f"{self.prefix}:{consumer_id}"
         val = await self.valkey.hget(key, str(partition))
-        return int(val) if val is not None else None
+        return int(val) if val is not None else 0
 
-    async def commit_offset(self, consumer_group: str, partition: int, offset: int) -> None:
-        key = f"{self.prefix}:{consumer_group}"
+    async def commit(self, consumer_id: str, partition: int, offset: int) -> None:
+        key = f"{self.prefix}:{consumer_id}"
         await self.valkey.hset(key, str(partition), str(offset))
 
 

@@ -202,25 +202,21 @@ class Pipeline:
         return self
 
     def map(self, func: MapFunction) -> 'Pipeline':
-        """Apply a map transformation."""
         op = Map(func)
         self._add_operator(op)
         return self
 
     def filter(self, predicate: FilterFunction) -> 'Pipeline':
-        """Apply a filter transformation."""
         op = Filter(predicate)
         self._add_operator(op)
         return self
 
     def key_by(self, key_selector: KeySelector) -> 'Pipeline':
-        """Partition stream by key."""
         op = KeyBy(key_selector)
         self._add_operator(op)
         return self
         
     def reduce(self, reducer: ReduceFunction) -> 'Pipeline':
-        """Reduce elements stream by key."""
         op = Reduce(reducer)
         self._add_operator(op)
         return self

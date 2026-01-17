@@ -45,7 +45,8 @@ class Source(Operator[None, T]):
         if self.timestamp_extractor:
             event_time = self.timestamp_extractor(element)
             # Simple watermark strategy: watermark = max observed event time
-            # In production, you'd typically have watermark = event_time - allowed_lateness
+            # In a real production environment, we'd probably want something more robust
+            # like watermark = event_time - allowed_lateness to handle out-of-order data.
             if event_time > self.last_emitted_watermark:
                 self.last_emitted_watermark = event_time
                 self.logger.debug(f"Emitting watermark: {event_time}")

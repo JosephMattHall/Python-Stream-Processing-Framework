@@ -112,19 +112,14 @@ class LocalLog(Log):
                 payload = await f.read(length)
                 
                 if len(payload) < length:
-                    # Partial write or corruption?
+                    # Partial write or corruption
                     break
                 
                 if current_idx >= offset:
                     try:
                         data = msgpack.unpackb(payload)
-                        # msgpack decodes strings as bytes sometimes depending on args, 
-                        # but packb default handles str -> str usually.
-                        # However, keys might be bytes if not careful? 
-                        # msgpack default uses raw=False (bytes->str) in recent versions if explicitly asked? 
-                        # No, default is raw=False in recent versions, so we get strings?
-                        # Let's assume standard behavior. If issues arise we'll debug.
-                        
+                        # Note: msgpack normally handles bytes->str decoding automatically
+                        # but we should be aware that older versions or config might return bytes.
                         yield StreamRecord(
                             id=data["id"],
                             key=data["key"],
@@ -135,8 +130,6 @@ class LocalLog(Log):
                             offset=data["offset"]
                         )
                     except Exception as e:
-                        # Skip corrupted
                         print(f"Read error: {e}")
-                        pass
                 
                 current_idx += 1

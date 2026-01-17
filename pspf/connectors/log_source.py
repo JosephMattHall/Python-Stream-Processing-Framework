@@ -66,17 +66,13 @@ class LogSource(Source[StreamRecord]):
                 await self.emit(record)
                 
                 # Commit offset (or update local tracking)
-                # In a real system, we might commit periodically (autocommit).
-                # Here, for safety/simplicity, we can commit after emit? 
-                # Or let the user manually commit? 
-                # Kafka consumers usually autocommit or manual.
-                # For exactly-once, we rely on the framework to checkpoint.
-                # But here, let's update our efficient state.
+                # Commit offset immediately to ensure at-least-once delivery.
+                # While a periodic autocommit (like Kafka) would offer higher throughput,
+                # committing per-message provides stronger safety guarantees for this implementation.
+                # TODO: Implement batched commits for better performance under high load.
                 current_offset = record.offset + 1
-                
-                # We can commit to store periodically or on every message.
-                # For safety in this simpler impl, commit every message or batch.
-                # Let's commit every message for now for correctness > perf.
+                # in this simpler implimentation, to be safe.
+                # commit every message - correctness > perfection.
                 await self.offset_store.commit(self.consumer_group, partition, current_offset)
                 
             if not found_records:

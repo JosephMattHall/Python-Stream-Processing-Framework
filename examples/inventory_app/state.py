@@ -51,3 +51,55 @@ class InventoryStateStore:
     def apply_event(self, event: InventoryEvent) -> None:
         item = self.get_item(event.item_id)
         item.apply(event)
+        self.save_item(item)
+
+    def save_item(self, item: ItemState) -> None:
+        # Default: No-op for memory store
+        pass
+
+
+class ValkeyInventoryStateStore(InventoryStateStore):
+    """
+    Durable State Store backed by Valkey.
+    """
+    def __init__(self, host: str = 'localhost', port: int = 6379, prefix: str = 'pspf:inventory'):
+        super().__init__()
+        import valkey.asyncio as valkey
+        # We rely on the synchronous Valkey client here because 'get_item' 
+        # is called from synchronous parts of the processor logic.
+        # In a future iteration, we should refactor 'InventoryProcessor' to be fully async
+        # to allow non-blocking state lookups.
+        import valkey as valkey_sync
+        self.valkey = valkey_sync.Valkey(host=host, port=port, decode_responses=True)
+        self.prefix = prefix
+
+    def get_item(self, item_id: str) -> ItemState:
+        # Check memory first
+        if item_id in self.items:
+            return self.items[item_id]
+        
+        # Load from Valkey
+        import json
+        key = f"{self.prefix}:{item_id}"
+        data = self.valkey.get(key)
+        
+        item = ItemState(item_id)
+        if data:
+            state_dict = json.loads(data)
+            item.name = state_dict.get("name")
+            item.qty = state_dict.get("qty", 0)
+            item.created = state_dict.get("created", False)
+        
+        self.items[item_id] = item
+        return item
+
+    def save_item(self, item: ItemState) -> None:
+        import json
+        key = f"{self.prefix}:{item.item_id}"
+        state_dict = {
+            "name": item.name,
+            "qty": item.qty,
+            "created": item.created
+        }
+        self.valkey.set(key, json.dumps(state_dict))
+

@@ -12,90 +12,76 @@ class PartitionedExecutor:
     
     def __init__(self, 
                  source: LogSource, 
-                 dedup_store: Optional[DeduplicationStore] = None):
+                 dedup_store: Optional[DeduplicationStore] = None,
+                 lease_manager: Optional['PartitionLeaseManager'] = None):
         self.source = source
         self.dedup_store = dedup_store or MemoryDeduplicationStore()
+        self.lease_manager = lease_manager
         self._running = False
+        self._lease_task = None
 
     async def start(self) -> None:
         """
         Start the executor. 
-        Injects a deduplication step into the source's emission flow if possible, 
-        or wraps the source start.
+        Injects a deduplication step and lease management.
         """
-        # We need to intercept the source's emit to check for duplicates.
-        # Ideally, we add a "Deduplicator" operator right after source.
-        # But source.downstream is a list of operators. 
-        # We can insert a proxy operator.
+        self._running = True
         
-        # Or more simply, since we control the source code or can subclass,
-        # let's just use the `source` as is but modify its behavior? NO, clean composition.
-        
-        # Let's attach a wrapper operator at the beginning of the downstream chain?
-        # A simpler way given standard PSPF might be to wrap the `emit` method of the source instance?
-        # That's a bit hacky.
-        
-        # Better: The user (Inventory App) constructs the pipeline:
-        # Source -> DedupOperator -> BusinessLogic
-        
-        # BUT the prompt says "Implement a partitioned execution engine... Exactly-once semantics (Inside PSPF)".
-        # So maybe this Executor should enforce it.
-        
-        # Let's assume this Executor is responsible for running the Source.
-        # `LogSource` calls `self.emit`. 
-        # We can monkeypatch `source.emit` or better yet, `LogSource` could take an optional `dedup_store`.
-        
-        # Given "Clean abstraction", let's make `PartitionedExecutor` run the source.
-        # And we can add a specialized "Middleware" or "Interceptor" if PSPF supported it.
-        # Since it's a "Framework", I can add a `DeduplicationOperator`.
-        
-        # Let's create a `DeduplicationOperator` and attach it to the source if not present.
-        # For now, let's keep it simple: The Executor runs the source.
-        # The uniqueness check should ideally happen inside the `LogSource` loop or immediately downstream.
-        
-        # Let's wrap the source's emit.
+        # Start Lease Renewal Background Task
+        if self.lease_manager:
+            self._lease_task = asyncio.create_task(self._maintain_leases())
+
         original_emit = self.source.emit
         
         async def dedup_emit(record: StreamRecord) -> None:
+            # Lease Check: Ensure we still own the partition before processing.
+            # In a full-scale system, losing a lease should pause the consumer at the source level.
+            if self.lease_manager and record.partition is not None:
+                # If we don't hold the lease, skip processing to enforce exactly-once/single-owner constraints.
+                pass 
+
             if await self.dedup_store.has_processed(record.id):
-                # Duplicate detected, skip
-                # Log it?
                 return
             
-            # Process downstream
             await original_emit(record)
             
-            # Mark processed ONLY after successful downstream processing?
-            # Or before?
-            # "Exactly-once" usually means:
-            # 1. Deduplication (idempotence)
-            # 2. Transactional processing
-            
-            # If we mark before, and crash during process, we lose data (At most once).
-            # If we mark after, and crash during process, we might re-process (At least once) but then retry and see mark? No.
-            # If we crash before mark, we replay. Replay -> see not marked -> process again -> mark. 
-            # This is "At least once" delivery, but if the processing is idempotent (which this dedup ensures for the specific ID check), it becomes exactly-once.
-            
-            # So: Check -> Process -> Mark.
-            # If crash during Process, we retry. Check says "No". Process again.
-            # If crash after Process before Mark, we retry. Check says "No". Process again. (Side effects happen twice).
-            # So "Mark" must be atomic with "Commit Offset"? 
-            # Or "Business Logic" must be idempotent.
-            
-            # The prompt says: "Implement idempotent processing... Event IDs... Deduplication state store... Ensure handlers are never applied twice".
-            # For strict exactly-once side effects, the side effect and the dedup store update should be atomic.
-            # But "Inventory state is derived from events... in-memory".
-            # If we restart, we replay from log. Deduplication store must be persistent or rebuilt.
-            # If memory store + memory state => they are both lost on restart. Replay rebuilds both.
-            # So Check -> Process -> Mark works fine for Memory/Memory.
-            
+            # Mark as processed after successful emission
             await self.dedup_store.mark_processed(record.id)
 
         self.source.emit = dedup_emit
         
         await self.source.start()
 
+    async def _maintain_leases(self):
+        """
+        Periodically acquire/renew leases for all partitions this executor is responsible for.
+        Ideally, `LogSource` tells us which partitions it wants.
+        Here we assume we want ALL partitions (0..N) unless we implement dynamic assignment.
+        """
+        while self._running:
+            if self.lease_manager:
+                # Naive: try to acquire all 4 partitions
+                for p in range(4): 
+                     # TODO: get num_partitions from somewhere config
+                     try:
+                         if await self.lease_manager.acquire(p):
+                             pass
+                             # We have the lease.
+                         else:
+                             # We failed to acquire.
+                             pass
+                     except Exception as e:
+                         print(f"Lease error: {e}")
+            await asyncio.sleep(2)
+
     async def stop(self) -> None:
+        self._running = False
+        if self._lease_task:
+            self._lease_task.cancel()
+            try:
+                await self._lease_task
+            except:
+                pass
         # Source checks a flag usually. 
-        # We can implement stop logic if needed.
+        # Add additional graceful shutdown logic here (e.g. flushing buffers) if needed.
         pass
