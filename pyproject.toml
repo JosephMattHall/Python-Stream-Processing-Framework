@@ -10,17 +10,24 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [
-  {name = "PSPF Team", email = "team@pspf.io"},
+  {name = "Joseph Hall", email = "joseph@josephmatthewhall.com"},
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    # Minimal dependencies as requested
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "aiofiles>=23.0.0",
+    "msgpack>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework"
+Issues = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework/issues"
 
 [project.optional-dependencies]
 dev = [

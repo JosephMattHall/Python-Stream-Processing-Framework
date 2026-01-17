@@ -1,261 +1,63 @@
 # PSPF Architecture
 
-PSPF (Python Stream Processing Framework) is a Python‑native, async stream
-processing framework for building stateful, fault‑tolerant, event‑driven systems.
-
-This document provides a high‑level overview of the core runtime, execution
-model, operators, and state management approach used by PSPF.
-
----
-
-## 🎯 Design Goals
-
-PSPF is designed to be:
-
-- **Python‑first** — simple to read, reason about, and extend
-- **Composable** — pipelines are built from small, predictable operators
-- **Stateful** — supports per‑key and operator‑scoped state
-- **Recoverable** — checkpoint‑based restart without data loss
-- **Pluggable** — connectors, stores, and runners are extensible
-
-The framework favors **clarity and determinism** over “black‑box magic.”
-
----
-
-## 🧩 High‑Level Architecture
-
-
-┌──────────┐     ┌──────────┐     ┌───────────────┐     ┌──────────┐
-│ Sources   │ →→ │ Pipeline │ →→ │ State / Store  │ →→ │ Sinks     │
-│ (Kafka,   │     │ Operators│     │ (per‑key, op) │     │ (Kafka,  │
-│ MQTT, etc)│     │ map/agg  │     │ + checkpoints │     │ DB, HTTP)│
-└──────────┘     └──────────┘     └───────────────┘     └──────────┘
-                         │
-                         ↓
-                 ┌────────────────┐
-                 │ Runtime Runner │
-                 │ local / dist   │
-                 └────────────────┘
-A PSPF application consists of:
-
-1: Sources — where events come from
-
-2: Operators — transformations applied to events
-
-3: State Stores — durable or in‑memory state
-
-4: Sinks — where results are emitted
-
-5: Runtime Runner — executes pipelines and manages scheduling
-
-🧱 Core Components
-✔️ Sources
-Sources produce events and feed them into the pipeline.
-
-Examples:
-
-Kafka topics
-
-MQTT streams
-
-File / log tailing
-
-HTTP event ingestion
-
-Custom user‑defined sources
-
-All sources implement a common asynchronous source interface.
-
-✔️ Operators
-Operators are the building blocks of a pipeline.
-
-Common classes of operators:
-
-map — transform each event
-
-filter — conditionally pass events
-
-key_by — partition streams by key
-
-reduce — aggregate values
-
-window — time or count‑based batching
-
-join — combine related streams
-
-custom — user‑defined logic blocks
-
-Operators form a directed pipeline graph.
-
-Each operator may optionally hold:
-
-operator‑scoped state
-
-per‑key state
-
-timers / window clocks
-
-✔️ State & Storage
-State is stored via pluggable backends:
-
-In‑memory (development / testing)
-
-Local persistent disk
-
-External store (future)
-
-Two types of state:
-
-Type	Description
-Per‑key state	Scoped to a data key (item_id, user_id, etc.)
-Operator state	Shared across all events processed by operator
-
-State updates are coordinated with checkpoints for recovery.
-
-✔️ Checkpointing & Recovery
-The runtime periodically:
-
-Pauses event advancement
-
-Flushes operator + key state
-
-Writes a durable snapshot
-
-Resumes processing
-
-On restart, PSPF:
-
-reloads last checkpoint
-
-resumes from last processed offset
-
-prevents duplicate processing (best‑effort at‑least‑once initially)
-
-Exactly‑once semantics are a roadmap goal.
-
-⚙️ Execution Model
-PSPF uses a cooperative, async execution model built on asyncio.
-
-Key properties:
-
-Operators run as async coroutines
-
-Pipelines advance via cooperative scheduling
-
-Backpressure propagates upstream
-
-Runners control concurrency & throughput
-
-Execution Flow
-
-event → source → operator → operator → sink
-Each stage yields control instead of blocking threads.
-
-This enables:
-
-predictable execution
-
-testable pipelines
-
-portable behavior across runners
-
-🏃 Runtime Runners
-PSPF separates pipeline definition from execution strategy.
-
-Local Runner (current)
-deterministic
-
-single‑process
-
-ideal for development and simulation
-
-Distributed Runner (planned)
-shard partitioned streams
-
-worker orchestration
-
-remote state backends
-
-work rebalancing
-
-Runners share the same API — pipelines do not change.
-
-🔌 Connectors
-Connectors integrate PSPF with external systems.
-
-Categories:
-
-Sources
-
-Sinks
-
-State stores
-
-Checkpoint writers
-
-Connectors are intentionally thin and composable.
-
-Example implementations (initial):
-
-Kafka
-
-file streams
-
-stdout sink
-
-in‑memory store
-
-🧪 Testing & Determinism
-Deterministic execution is a core principle.
-
-This enables:
-
-reproducible local runs
-
-simulation of event sequences
-
-operator‑level unit tests
-
-predictable failure recovery behavior
-
-A test runner provides:
-
-virtual clocks
-
-synthetic event streams
-
-deterministic replay
-
-🛠️ Design Principles
-PSPF follows these architectural principles:
-
-Prefer predictable correctness over raw throughput
-
-Expose internals when useful — avoid “magic”
-
-Make operator behavior explicit and observable
-
-Treat state as a first‑class concept
-
-Support gradual evolution toward distributed execution
-
-🗺️ Future Architecture Extensions
-Planned enhancements include:
-
-Distributed runner
-
-Remote pluggable state backends
-
-Metrics & topology inspection UI
-
-Exactly‑once processing mode
-
-WASM / sandboxed operator execution (research)
-
-📎 Appendix: Terminology
-Term	Meaning
-Stream	Continuous sequence of events
-Operator	Transformation stage
-State Store	Durable storage for operator/key state
-Checkpoint	Persistent snapshot for recovery
-Runner	Component that executes a pipeline
+PSPF (Python Stream Processing Framework) is designed to bring specific "Big Data" guarantees—partitioning, ordering, and replayability—to standard Python applications without the operational overhead of managing a Kafka cluster.
+
+## 🎯 Core Concepts
+
+### 1. The Log (`LocalLog`)
+Instead of a remote broker, PSPF uses a **Native Log**.
+- **Storage:** Data is written to local disk in `.pspf_data/`.
+- **Format:** Events are serialized using **MessagePack** (binary) with length-prefixed framing.
+- **Partitioning:** The log is split into $N$ files (`partition_0.bin`, `partition_1.bin`, ...).
+- **Hashing:** `partition = hash(key) % num_partitions`. This ensures all events for the same entity (e.g., "User 123") always go to the same file.
+
+### 2. The Record (`StreamRecord`)
+The canonical unit of data is the `StreamRecord`:
+```python
+@dataclass
+class StreamRecord:
+    id: str                  # Unique Event ID (UUID)
+    key: str                 # Partition key
+    value: Any               # Event payload (Dict)
+    timestamp: datetime      # Event creation time
+    partition: int
+    offset: int
+```
+
+### 3. Execution Model (`PartitionedExecutor`)
+PSPF enforces a strict concurrency model to preventing race conditions:
+- **Per-Partition Sequential:** A single partition is never processed concurrently. This guarantees that if "Create Item" comes before "Checkout Item" in the log, it will happen in that order.
+- **Cross-Partition Parallel:** Different partitions are processed in parallel asyncio tasks.
+
+### 4. Exactly-Once Processing
+To ensure correctness even during crashes, PSPF implements **Idempotency**:
+1.  **Deduplication Store:** Before processing an event, the system checks if `event.id` has been seen.
+2.  **At-Least-Once Delivery:** If a worker crashes, it replays from the last checkpoint. This might re-deliver the last few events.
+3.  **Result:** The Deduplication Store blocks the re-delivered events, ensuring the side effect happens exactly once.
+
+*Note: The current implementation uses an In-Memory Deduplication Store. For production durability across full system restarts, this should be swapped for a Redis or SQLite backend.*
+
+## 🧩 Component Diagram
+
+```mermaid
+graph TD
+    API[FastAPI / Producer] -->|Append(Record)| Log[LocalLog .bin]
+    
+    subgraph "PSPF Worker"
+        Log -->|Read(Offset)| Source[LogSource]
+        Source -->|StreamRecord| Dedup{Dedup Check}
+        
+        Dedup -->|Duplicate| Skip[Skip]
+        Dedup -->|New| Proc[Processor]
+        
+        Proc -->|Update| State[(State Store)]
+        Proc -->|Commit| Offsets[OffsetStore]
+    end
+```
+
+## ⚙️ IO & Extensibility
+
+While PSPF includes a native log, the abstractions (`Log`, `Source`, `Sink`) are decoupled. You can implement:
+- **KafkaLog:** Replace `LocalLog` with a wrapper around `aiokafka` to scale to multiple servers.
+- **RedisOffsetStore:** Store consumer offsets in Redis for distributed workers.
+- **PostgresState:** Store entity state in a relational DB instead of memory.
