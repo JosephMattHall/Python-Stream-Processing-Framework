@@ -2,13 +2,17 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["pspf*"]
+exclude = ["examples*", "tests*", "protos*"]
+
 [project]
 name = "pspf"
 version = "0.1.0"
 description = "Python Stream Processing Framework"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {file = "LICENSE"}
+license = "MIT"
 authors = [
   {name = "Joseph Hall", email = "joseph@josephmatthewhall.com"},
 ]
