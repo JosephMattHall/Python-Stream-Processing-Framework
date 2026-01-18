@@ -13,6 +13,7 @@ from pspf.log.local_log import LocalLog
 from pspf.connectors.log_source import LogSource
 from pspf.runtime.executor import PartitionedExecutor
 from pspf.runtime.valkey_store import ValkeyOffsetStore, ValkeyDeduplicationStore
+from pspf.utils.metrics import MetricsManager
 
 from .pipeline import FraudDetector
 from protos import fraud_pb2
@@ -71,6 +72,19 @@ async def create_transaction(req: TransactionRequest):
     await log.append(record)
     return {"status": "accepted"}
 
+@app.get("/metrics")
+async def get_metrics():
+    mm = MetricsManager()
+    if hasattr(mm, "_has_prom") and mm._has_prom:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        from fastapi import Response
+        return Response(content=generate_latest(mm.prom_registry), media_type=CONTENT_TYPE_LATEST)
+    return mm.get_all()
+
 @app.get("/history/{user_id}")
 async def get_history(user_id: str):
     return detector.history.get(user_id, [])
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8002)

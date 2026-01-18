@@ -31,6 +31,9 @@ class PartitionedExecutor:
         if self.lease_manager:
             self._lease_task = asyncio.create_task(self._maintain_leases())
 
+        # Start Lag Monitoring Task
+        self._lag_task = asyncio.create_task(self._monitor_lag())
+
         original_emit = self.source.emit
         
         async def dedup_emit(record: StreamRecord) -> None:
@@ -74,14 +77,47 @@ class PartitionedExecutor:
                          print(f"Lease error: {e}")
             await asyncio.sleep(2)
 
+    async def _monitor_lag(self):
+        """
+        Periodically calculate lag for each partition and update metrics.
+        """
+        from pspf.utils.metrics import MetricsManager
+        metrics = MetricsManager()
+        
+        while self._running:
+            try:
+                # We need to reach into the log via the source
+                # LogSource has a .log property
+                if hasattr(self.source, "log"):
+                    log = self.source.log
+                    for p in range(log.partitions()):
+                        hw = await log.get_high_watermark(p)
+                        # We need the current offset from the source/offset store
+                        # LogSource tracks current offset internally or gets it from store
+                        # For now, let's assume it has an internal map
+                        if hasattr(self.source, "current_offsets"):
+                            current = self.source.current_offsets.get(p, 0)
+                            lag = max(0, hw - current)
+                            metrics.set_lag(p, lag)
+            except Exception as e:
+                pass
+            await asyncio.sleep(5)
+
+
     async def stop(self) -> None:
         self._running = False
         if self._lease_task:
             self._lease_task.cancel()
-            try:
+        if hasattr(self, "_lag_task") and self._lag_task:
+            self._lag_task.cancel()
+        
+        try:
+            if self._lease_task:
                 await self._lease_task
-            except:
-                pass
+            if hasattr(self, "_lag_task") and self._lag_task:
+                await self._lag_task
+        except:
+            pass
         # Source checks a flag usually. 
         # Add additional graceful shutdown logic here (e.g. flushing buffers) if needed.
         pass

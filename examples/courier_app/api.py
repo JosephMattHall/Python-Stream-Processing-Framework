@@ -14,6 +14,7 @@ from pspf.connectors.log_source import LogSource
 from pspf.runtime.executor import PartitionedExecutor
 from pspf.runtime.valkey_store import ValkeyOffsetStore, ValkeyDeduplicationStore
 from pspf.runtime.coordination import PartitionLeaseManager
+from pspf.utils.metrics import MetricsManager
 
 from .state import CourierStateStore
 from .pipeline import CourierProcessor
@@ -100,6 +101,19 @@ async def driver_online(req: DriverOnlineRequest):
     await log.append(record)
     return {"status": "online"}
 
+@app.get("/metrics")
+async def get_metrics():
+    mm = MetricsManager()
+    if hasattr(mm, "_has_prom") and mm._has_prom:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        from fastapi import Response
+        return Response(content=generate_latest(mm.prom_registry), media_type=CONTENT_TYPE_LATEST)
+    return mm.get_all()
+
 @app.get("/assignments")
 async def get_assignments():
     return state_store.assignments
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)

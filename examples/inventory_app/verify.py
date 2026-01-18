@@ -8,22 +8,29 @@ BASE_URL = "http://localhost:8000"
 def test_inventory_flow():
     print("Starting E2E Verification...")
     
-    # 1. Create Item
-    item_id = "item-alpha"
+    # Use a unique ID per run to avoid stale state from previous runs in Valkey
+    import uuid
+    run_id = uuid.uuid4().hex[:4]
+    item_id = f"item-{run_id}"
+    
     print(f"\n[1] Creating item {item_id}...")
-    r = requests.post(f"{BASE_URL}/items/{item_id}", json={"name": "Alpha Widget", "initial_qty": 0})
+    r = requests.post(f"{BASE_URL}/items/{item_id}", json={"name": f"Widget {run_id}", "initial_qty": 0})
     print(f"Response: {r.status_code} {r.json()}")
     assert r.status_code == 200
     
-    # Wait for pipeline
-    time.sleep(1)
-    
-    # Verify State
-    r = requests.get(f"{BASE_URL}/items/{item_id}")
-    state = r.json()
+    # Poll for creation (async pipeline)
+    print("Waiting for item creation...")
+    state = {}
+    for i in range(10):
+        r = requests.get(f"{BASE_URL}/items/{item_id}")
+        state = r.json()
+        if state.get('exists'):
+            break
+        time.sleep(0.5)
+        
     print(f"State: {state}")
-    assert state['name'] == "Alpha Widget"
-    assert state['qty'] == 0
+    assert state.get('name') == f"Widget {run_id}"
+    assert state.get('qty') == 0
 
     # 2. Check In 10
     print(f"\n[2] Checking in 10 units...")

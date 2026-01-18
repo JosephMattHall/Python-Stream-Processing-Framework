@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  inventory-app:
+    build: .
+    container_name: pspf-inventory
+    ports:
+      - "8000:8000"
+    environment:
+      - PSPF_DATA_DIR=/data/inventory
+    volumes:
+      - pspf_data_inventory:/data/inventory
+    command: uvicorn examples.inventory_app.api:app --host 0.0.0.0 --port 8000
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  courier-app:
+    build: .
+    container_name: pspf-courier
+    ports:
+      - "8001:8001"
+    environment:
+      - PSPF_DATA_DIR=/data/courier
+    volumes:
+      - pspf_data_courier:/data/courier
+    command: uvicorn examples.courier_app.api:app --host 0.0.0.0 --port 8001
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  fraud-app:
+    build: .
+    container_name: pspf-fraud
+    ports:
+      - "8002:8002"
+    environment:
+      - PSPF_DATA_DIR=/data/fraud
+    volumes:
+      - pspf_data_fraud:/data/fraud
+    command: uvicorn examples.fraud_app.api:app --host 0.0.0.0 --port 8002
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+volumes:
+  pspf_data_inventory:
+  pspf_data_courier:
+  pspf_data_fraud:

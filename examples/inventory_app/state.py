@@ -43,17 +43,17 @@ class InventoryStateStore:
     def __init__(self):
         self.items: Dict[str, ItemState] = {}
 
-    def get_item(self, item_id: str) -> ItemState:
+    async def get_item(self, item_id: str) -> ItemState:
         if item_id not in self.items:
             self.items[item_id] = ItemState(item_id)
         return self.items[item_id]
 
-    def apply_event(self, event: InventoryEvent) -> None:
-        item = self.get_item(event.item_id)
+    async def apply_event(self, event: InventoryEvent) -> None:
+        item = await self.get_item(event.item_id)
         item.apply(event)
-        self.save_item(item)
+        await self.save_item(item)
 
-    def save_item(self, item: ItemState) -> None:
+    async def save_item(self, item: ItemState) -> None:
         # Default: No-op for memory store
         pass
 
@@ -65,15 +65,10 @@ class ValkeyInventoryStateStore(InventoryStateStore):
     def __init__(self, host: str = 'localhost', port: int = 6379, prefix: str = 'pspf:inventory'):
         super().__init__()
         import valkey.asyncio as valkey
-        # We rely on the synchronous Valkey client here because 'get_item' 
-        # is called from synchronous parts of the processor logic.
-        # In a future iteration, we should refactor 'InventoryProcessor' to be fully async
-        # to allow non-blocking state lookups.
-        import valkey as valkey_sync
-        self.valkey = valkey_sync.Valkey(host=host, port=port, decode_responses=True)
+        self.valkey = valkey.Valkey(host=host, port=port, decode_responses=True)
         self.prefix = prefix
 
-    def get_item(self, item_id: str) -> ItemState:
+    async def get_item(self, item_id: str) -> ItemState:
         # Check memory first
         if item_id in self.items:
             return self.items[item_id]
@@ -81,7 +76,7 @@ class ValkeyInventoryStateStore(InventoryStateStore):
         # Load from Valkey
         import json
         key = f"{self.prefix}:{item_id}"
-        data = self.valkey.get(key)
+        data = await self.valkey.get(key)
         
         item = ItemState(item_id)
         if data:
@@ -93,7 +88,7 @@ class ValkeyInventoryStateStore(InventoryStateStore):
         self.items[item_id] = item
         return item
 
-    def save_item(self, item: ItemState) -> None:
+    async def save_item(self, item: ItemState) -> None:
         import json
         key = f"{self.prefix}:{item.item_id}"
         state_dict = {
@@ -101,5 +96,5 @@ class ValkeyInventoryStateStore(InventoryStateStore):
             "qty": item.qty,
             "created": item.created
         }
-        self.valkey.set(key, json.dumps(state_dict))
+        await self.valkey.set(key, json.dumps(state_dict))
 

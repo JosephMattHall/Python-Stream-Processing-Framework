@@ -50,15 +50,15 @@ class KeyedState(Generic[T]):
     def __init__(self) -> None:
         self._store: Dict[Any, T] = {}
 
-    def get(self, key: Any) -> Optional[T]:
+    async def get(self, key: Any) -> Optional[T]:
         """Retrieve state for a given key."""
         return self._store.get(key)
 
-    def set(self, key: Any, value: T) -> None:
+    async def set(self, key: Any, value: T) -> None:
         """Set state for a given key."""
         self._store[key] = value
 
-    def clear(self, key: Any) -> None:
+    async def clear(self, key: Any) -> None:
         """Clear state for a given key."""
         if key in self._store:
             del self._store[key]
@@ -70,3 +70,36 @@ class KeyedState(Generic[T]):
     def restore(self, state: Dict[Any, T]) -> None:
         """Restore keyed state from a snapshot."""
         self._store = state.copy()
+
+
+class ValkeyKeyedState(KeyedState[T]):
+    """
+    Keyed state backed by Valkey.
+    Enables state to exceed worker memory and persists across restarts.
+    """
+    def __init__(self, prefix: str, host: str = "localhost", port: int = 6379):
+        import valkey.asyncio as valkey
+        import msgpack
+        self.client = valkey.Valkey(host=host, port=port)
+        self.prefix = f"pspf:state:{prefix}"
+        self.msgpack = msgpack
+
+    async def get(self, key: Any) -> Optional[T]:
+        val = await self.client.hget(self.prefix, str(key))
+        if val:
+            return self.msgpack.unpackb(val)
+        return None
+
+    async def set(self, key: Any, value: T) -> None:
+        data = self.msgpack.packb(value)
+        await self.client.hset(self.prefix, str(key), data)
+
+    async def clear(self, key: Any) -> None:
+        await self.client.hdel(self.prefix, str(key))
+
+    def snapshot(self) -> Dict[Any, T]:
+        # Valkey state is already durable, so snapshot is a no-op/different concern
+        return {}
+
+    def restore(self, state: Dict[Any, T]) -> None:
+        pass

@@ -21,6 +21,15 @@ class ValkeyOffsetStore(OffsetStore):
         key = f"{self.prefix}:{consumer_id}"
         await self.valkey.hset(key, str(partition), str(offset))
 
+    async def get_watermark(self, pipeline_id: str) -> float:
+        key = f"{self.prefix}:watermarks"
+        val = await self.valkey.hget(key, pipeline_id)
+        return float(val) if val is not None else float('-inf')
+
+    async def commit_watermark(self, pipeline_id: str, timestamp: float) -> None:
+        key = f"{self.prefix}:watermarks"
+        await self.valkey.hset(key, pipeline_id, str(timestamp))
+
 
 class ValkeyDeduplicationStore(DeduplicationStore):
     """

@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Generic, TypeVar, TYPE_CHECKING, Dict
 from pspf.utils.typing import T, U, MapFunction, FilterFunction, KeySelector, ReduceFunction
 from pspf.utils.logging import get_logger
 from pspf.utils.metrics import MetricsManager
+from pspf.utils.tracing import get_tracer, start_span
 
 if TYPE_CHECKING:
     from pspf.connectors.base import Source, Sink
@@ -24,6 +25,12 @@ class Operator(ABC, Generic[T, U]):
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=100)  # backpressure buffer
         self._work_task: Optional[asyncio.Task] = None
         self.logger = get_logger(self.name)
+        self.dlq_sink: Optional['Sink'] = None
+        self._tracer = get_tracer(self.name)
+
+    def set_dlq(self, sink: 'Sink') -> None:
+        """Route failed elements to this sink."""
+        self.dlq_sink = sink
 
     def connect(self, operator: 'Operator') -> None:
         """Connect this operator to a downstream operator."""
@@ -75,15 +82,22 @@ class Operator(ABC, Generic[T, U]):
             await op.process_watermark(timestamp)
 
     async def _worker_loop(self) -> None:
-        """Process elements from the queue until it's empty.
-        
-        This cooperative async loop processes buffered elements and provides
-        natural backpressure when the queue fills.
-        """
+        """Process elements from the queue until it's empty."""
         while not self._queue.empty():
             element = await self._queue.get()
-            await self._process_captured(element)
-            self._queue.task_done()
+            try:
+                # Add distributed tracing span
+                with start_span(self._tracer, f"{self.name}.process"):
+                    await self._process_captured(element)
+            except Exception as e:
+                self.logger.error(f"Error in {self.name}: {e}")
+                if self.dlq_sink:
+                    self.logger.info(f"Routing failed element to DLQ: {element}")
+                    # Wrap in StreamRecord error metadata if possible? 
+                    # For now just send as is to the sink.
+                    await self.dlq_sink.process(element)
+            finally:
+                self._queue.task_done()
 
     @abstractmethod
     async def _process_captured(self, element: T) -> None:
@@ -163,14 +177,14 @@ class Reduce(Operator[tuple[Any, T], tuple[Any, T]]):
 
     async def _process_captured(self, element: tuple[Any, T]) -> None:
         key, value = element
-        current_state = self.state.get(key)
+        current_state = await self.state.get(key)
 
         if current_state is None:
             new_state = value
         else:
             new_state = self.reducer(current_state, value)
 
-        self.state.set(key, new_state)
+        await self.state.set(key, new_state)
         await self.emit((key, new_state))
 
     def snapshot_state(self) -> Dict[str, Any]:

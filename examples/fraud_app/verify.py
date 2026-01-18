@@ -6,11 +6,11 @@ BASE_URL = "http://localhost:8002"
 
 def run_test():
     print("--- Starting Fraud Verification ---")
-    
-    user_id = "user-vip"
+    import uuid
+    user_id = f"user-{uuid.uuid4().hex[:6]}"
     
     # 1. Establish History (Avg ~10)
-    print("[1] Sending normal transactions...")
+    print(f"[1] Sending normal transactions for {user_id}...")
     for amt in [10.0, 12.0, 9.0, 11.0]:
         requests.post(f"{BASE_URL}/transactions", json={
             "user_id": user_id,

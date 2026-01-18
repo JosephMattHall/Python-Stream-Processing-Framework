@@ -26,6 +26,11 @@ class Log(ABC):
         """Return the number of partitions."""
         pass
 
+    @abstractmethod
+    async def get_high_watermark(self, partition: int) -> int:
+        """Return the highest available offset + 1 for a partition."""
+        pass
+
 class OffsetStore(ABC):
     """
     Abstract interface for managing consumer group offsets.
@@ -39,4 +44,14 @@ class OffsetStore(ABC):
     @abstractmethod
     async def commit(self, consumer_id: str, partition: int, offset: int) -> None:
         """Commit an offset for a consumer group and partition."""
+        pass
+
+    @abstractmethod
+    async def get_watermark(self, pipeline_id: str) -> float:
+        """Get the last emitted watermark for a pipeline."""
+        pass
+
+    @abstractmethod
+    async def commit_watermark(self, pipeline_id: str, timestamp: float) -> None:
+        """Commit the latest watermark for a pipeline."""
         pass
