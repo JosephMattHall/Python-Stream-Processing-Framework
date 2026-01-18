@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package courier;
+
+message JobCreated {
+  string job_id = 1;
+  string customer_id = 2;
+  string pickup_address = 3;
+  string delivery_address = 4;
+}
+
+message DriverOnline {
+  string driver_id = 1;
+  string vehicle_type = 2;
+}
+
+message JobAssigned {
+  string job_id = 1;
+  string driver_id = 2;
+  string timestamp = 3;
+}
+
+message JobDelivered {
+  string job_id = 1;
+  string timestamp = 2;
+}

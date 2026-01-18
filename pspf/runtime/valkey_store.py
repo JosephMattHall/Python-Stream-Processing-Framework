@@ -1,0 +1,52 @@
+import valkey.asyncio as valkey
+from typing import Optional
+from pspf.log.interfaces import OffsetStore
+from pspf.runtime.dedup import DeduplicationStore
+
+class ValkeyOffsetStore(OffsetStore):
+    """
+    Durable Offset Store backed by Valkey.
+    Structure: HASH {prefix}:{group_id} -> {partition} -> {offset}
+    """
+    def __init__(self, host: str = 'localhost', port: int = 6379, prefix: str = 'pspf:offsets'):
+        self.valkey = valkey.Valkey(host=host, port=port, decode_responses=True)
+        self.prefix = prefix
+
+    async def get(self, consumer_id: str, partition: int) -> int:
+        key = f"{self.prefix}:{consumer_id}"
+        val = await self.valkey.hget(key, str(partition))
+        return int(val) if val is not None else 0
+
+    async def commit(self, consumer_id: str, partition: int, offset: int) -> None:
+        key = f"{self.prefix}:{consumer_id}"
+        await self.valkey.hset(key, str(partition), str(offset))
+
+    async def get_watermark(self, pipeline_id: str) -> float:
+        key = f"{self.prefix}:watermarks"
+        val = await self.valkey.hget(key, pipeline_id)
+        return float(val) if val is not None else float('-inf')
+
+    async def commit_watermark(self, pipeline_id: str, timestamp: float) -> None:
+        key = f"{self.prefix}:watermarks"
+        await self.valkey.hset(key, pipeline_id, str(timestamp))
+
+
+class ValkeyDeduplicationStore(DeduplicationStore):
+    """
+    Durable Deduplication Store backed by Valkey.
+    Uses SET with Expiry for idempotency.
+    """
+    def __init__(self, host: str = 'localhost', port: int = 6379, ttl_seconds: int = 86400, prefix: str = 'pspf:dedup'):
+        self.valkey = valkey.Valkey(host=host, port=port, decode_responses=True)
+        self.ttl = ttl_seconds
+        self.prefix = prefix
+
+    async def has_processed(self, event_id: str) -> bool:
+        key = f"{self.prefix}:{event_id}"
+        exists = await self.valkey.exists(key)
+        return bool(exists)
+
+    async def mark_processed(self, event_id: str) -> None:
+        key = f"{self.prefix}:{event_id}"
+        # Set with TTL
+        await self.valkey.set(key, "1", ex=self.ttl)

@@ -25,6 +25,7 @@ class LogSource(Source[StreamRecord]):
         self._running = False
         # If partitions not specified, read all
         self.partitions_to_read = partitions
+        self.current_offsets = {}
 
     async def start(self) -> None:
         """Start consuming from the log."""
@@ -53,6 +54,7 @@ class LogSource(Source[StreamRecord]):
         """Consume loop for a single partition."""
         # Restore offset
         current_offset = await self.offset_store.get(self.consumer_group, partition)
+        self.current_offsets[partition] = current_offset
         self.logger.info(f"Partition {partition} starting at offset {current_offset}")
         
         while self._running:
@@ -66,17 +68,14 @@ class LogSource(Source[StreamRecord]):
                 await self.emit(record)
                 
                 # Commit offset (or update local tracking)
-                # In a real system, we might commit periodically (autocommit).
-                # Here, for safety/simplicity, we can commit after emit? 
-                # Or let the user manually commit? 
-                # Kafka consumers usually autocommit or manual.
-                # For exactly-once, we rely on the framework to checkpoint.
-                # But here, let's update our efficient state.
+                # Commit offset immediately to ensure at-least-once delivery.
+                # While a periodic autocommit (like Kafka) would offer higher throughput,
+                # committing per-message provides stronger safety guarantees for this implementation.
+                # TODO: Implement batched commits for better performance under high load.
                 current_offset = record.offset + 1
-                
-                # We can commit to store periodically or on every message.
-                # For safety in this simpler impl, commit every message or batch.
-                # Let's commit every message for now for correctness > perf.
+                self.current_offsets[partition] = current_offset
+                # in this simpler implimentation, to be safe.
+                # commit every message - correctness > perfection.
                 await self.offset_store.commit(self.consumer_group, partition, current_offset)
                 
             if not found_records:

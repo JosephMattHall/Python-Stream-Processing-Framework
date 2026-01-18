@@ -18,11 +18,19 @@ class Source(Operator[None, T]):
         super().__init__(name)
         self.timestamp_extractor: Optional[Callable[[T], float]] = None
         self.last_emitted_watermark: float = float('-inf')
+        self.offset_store: Optional['OffsetStore'] = None
+        self.pipeline_id: Optional[str] = None
     
     @abstractmethod
     async def start(self) -> None:
         """Start generating data."""
         pass
+
+    async def restore_watermark(self) -> None:
+        """Restore the latest watermark from the offset store."""
+        if self.offset_store and self.pipeline_id:
+            self.last_emitted_watermark = await self.offset_store.get_watermark(self.pipeline_id)
+            self.logger.info(f"Restored watermark: {self.last_emitted_watermark}")
     
     async def _process_captured(self, element: None) -> None:
         """Sources do not process input from upstream."""
@@ -45,11 +53,16 @@ class Source(Operator[None, T]):
         if self.timestamp_extractor:
             event_time = self.timestamp_extractor(element)
             # Simple watermark strategy: watermark = max observed event time
-            # In production, you'd typically have watermark = event_time - allowed_lateness
+            # In a real production environment, we'd probably want something more robust
+            # like watermark = event_time - allowed_lateness to handle out-of-order data.
             if event_time > self.last_emitted_watermark:
                 self.last_emitted_watermark = event_time
                 self.logger.debug(f"Emitting watermark: {event_time}")
                 await self.emit_watermark(event_time)
+                
+                # Persist watermark
+                if self.offset_store and self.pipeline_id:
+                    await self.offset_store.commit_watermark(self.pipeline_id, event_time)
 
 
 class Sink(Operator[T, None]):

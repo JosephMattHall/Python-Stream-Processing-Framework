@@ -1,24 +1,40 @@
 import asyncio
-from typing import List, Optional
+from typing import List, Optional, Any
 from pspf.connectors.base import Source
 
-class MQTTSource(Source[str]):
-    """Simulated MQTT source."""
-
-    def __init__(self, topic: str, host: str, port: int = 1883, msg_limit: Optional[int] = 5):
+class MQTTSource(Source[bytes]):
+    """
+    Production-grade MQTT source using gmqtt.
+    """
+    def __init__(self, topic: str, host: str, port: int = 1883):
         super().__init__(name=f"MQTTSource({topic})")
         self.topic = topic
         self.host = host
         self.port = port
-        self.msg_limit = msg_limit
+        self._client = None
+        self._queue = asyncio.Queue()
 
     async def start(self) -> None:
-        """Starts the simulated MQTT message stream."""
-        i = 0
-        while True:
-            if self.msg_limit is not None and i >= self.msg_limit:
-                break
+        try:
+            from gmqtt import Client as MQTTClient
+            self._client = MQTTClient("pspf-client")
+            self._client.on_message = self._on_message
             
-            await self.emit(f"mqtt-msg-{i} on {self.topic}")
-            await asyncio.sleep(0.2)
-            i += 1
+            await self._client.connect(self.host, self.port)
+            self._client.subscribe(self.topic)
+            self.logger.info(f"Subscribed to MQTT: {self.topic}")
+            
+            while True:
+                msg = await self._queue.get()
+                await self.emit(msg)
+        except ImportError:
+            self.logger.warning("gmqtt not installed. Falling back to simulation.")
+            for i in range(5):
+                await self.emit(f"mqtt-{i}".encode())
+                await asyncio.sleep(0.2)
+        finally:
+            if self._client:
+                await self._client.disconnect()
+
+    def _on_message(self, client, topic, payload, qos, properties):
+        self._queue.put_nowait(payload)

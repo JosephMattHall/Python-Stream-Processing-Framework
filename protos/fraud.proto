@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package fraud;
+
+message Transaction {
+  string transaction_id = 1;
+  string user_id = 2;
+  double amount = 3;
+  string merchant = 4;
+  string timestamp = 5;
+}
+
+message FraudAlert {
+  string alert_id = 1;
+  string user_id = 2;
+  string reason = 3;
+  double transaction_amount = 4;
+  double avg_spend = 5;
+  string timestamp = 6;
+}

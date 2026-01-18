@@ -12,12 +12,11 @@ class FileSource(Source[str]):
         self.delay = delay
 
     async def start(self) -> None:
-        """Read lines from file and emit them."""
         try:
             with open(self.path, 'r') as f:
                 for line in f:
                     stripped = line.strip()
-                    if not stripped:  # Skip empty lines
+                    if not stripped:
                         continue
                     await self.emit(stripped)
                     if self.delay > 0:
@@ -26,34 +25,28 @@ class FileSource(Source[str]):
             self.logger.error(f"File not found: {self.path}")
             raise
         except Exception as e:
-            self.logger.error(f"Error reading file {self.path}: {e}")
+            self.logger.error(f"Error reading {self.path}: {e}")
             raise
 
 
 class StorageSink(Sink[Any]):
-    """Writes elements to a file."""
-
     def __init__(self, path: str):
         super().__init__(name=f"StorageSink({path})")
         self.path = path
 
     async def _process_captured(self, element: Any) -> None:
-        """Write element to file."""
         try:
             with open(self.path, 'a') as f:
-                f.write(f"{str(element)}\n")  # Fixed: was \\n, now actual newline
+                f.write(f"{str(element)}\n")
         except Exception as e:
             self.logger.error(f"Error writing to {self.path}: {e}")
             raise
 
 
 class ConsoleSink(Sink[Any]):
-    """Writes elements to stdout."""
-    
     def __init__(self, prefix: str = ""):
         super().__init__("ConsoleSink")
         self.prefix = prefix
 
     async def _process_captured(self, element: Any) -> None:
-        """Print element to console."""
         print(f"{self.prefix}{element}")

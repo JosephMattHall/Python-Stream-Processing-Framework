@@ -156,3 +156,9 @@ cython_debug/
 # Project specific
 inventory_data.txt
 example_input.txt
+
+
+
+.pspf_data*
+*.bin
+*.log

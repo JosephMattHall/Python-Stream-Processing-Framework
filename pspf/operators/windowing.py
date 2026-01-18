@@ -73,16 +73,11 @@ class SlidingEventTimeWindow(Operator[tuple, List[tuple]]):
         self.current_watermark: float = float('-inf')
 
     async def _process_captured(self, element: tuple) -> None:
-        """Buffer elements as they arrive."""
         self.buffer.append(element)
         self.logger.debug(f"Buffered element: {element}, buffer size: {len(self.buffer)}")
 
     async def on_watermark(self, timestamp: float) -> None:
-        """When watermark advances, emit complete windows.
-        
-        Args:
-            timestamp: The new watermark timestamp
-        """
+        # Emit complete windows when watermark advances
         self.logger.debug(f"Received watermark: {timestamp}, current: {self.current_watermark}")
         
         if timestamp <= self.current_watermark:

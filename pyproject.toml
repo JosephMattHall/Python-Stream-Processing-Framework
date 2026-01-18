@@ -23,7 +23,12 @@ dependencies = [
     "uvicorn>=0.20.0",
     "aiofiles>=23.0.0",
     "msgpack>=1.0.0",
+    "valkey>=5.0.0",
+    "protobuf>=4.0.0",
 ]
+
+[project.scripts]
+pspf = "pspf.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework"
@@ -37,6 +42,12 @@ dev = [
   "black",
   "isort",
   "ruff",
+]
+hardened = [
+    "aiokafka>=0.8.0",
+    "gmqtt>=0.6.12",
+    "opentelemetry-api",
+    "opentelemetry-sdk",
 ]
 
 [tool.mypy]

@@ -48,8 +48,14 @@ def run_test():
         time.sleep(1) # Let pipeline process
         
         # Verify State in Instance A
-        r = requests.get(f"{BASE_URL}/items/{item_id}")
-        qty = r.json()['qty']
+        # Poll for consistency (Async pipeline)
+        for _ in range(10):
+            resp = requests.get(f"{BASE_URL}/items/{item_id}")
+            qty = resp.json()["qty"]
+            if qty == 100:
+                break
+            time.sleep(0.5)
+            
         print(f"    Instance A reports Qty: {qty}")
         assert qty == 100
 
