@@ -25,7 +25,13 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
             ("1678888888000-0", {"event_type": "BaseEvent", "payload": {"data": "test1"}}),
             ("1678888888000-1", {"event_type": "BaseEvent", "payload": {"data": "test2"}}),
         ]
-        mock_client.xreadgroup.return_value = [["stream_key", mock_messages]]
+        # Mock XREADGROUP to return data once, then empty (to simulate end of stream/wait)
+        mock_client.xreadgroup.side_effect = [
+            [["stream_key", mock_messages]], # 1st call: data
+            [], # 2nd call: empty
+            [], # 3rd call: empty
+            []  # ...
+        ]
         mock_client.xgroup_create = AsyncMock()
         mock_client.xack = AsyncMock()
         
@@ -80,9 +86,10 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(processed_events[0].offset, "1678888888000-0")
                 
                 # Verify ACK was called
-                mock_client.xack.assert_called()
+                # ack_batch uses pipeline, so check mock_pipeline.xack
+                mock_pipeline.xack.assert_called()
                 # Check arguments: xack(stream, group, id1, id2)
-                call_args = mock_client.xack.call_args
+                call_args = mock_pipeline.xack.call_args
                 self.assertEqual(call_args[0][0], "test-stream")
                 self.assertEqual(call_args[0][1], "group1")
                 self.assertIn("1678888888000-0", call_args[0])

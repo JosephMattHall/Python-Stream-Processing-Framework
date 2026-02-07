@@ -1,0 +1,41 @@
+INFO:pspf.telemetry:OpenTelemetry disabled via config.
+WARNING:pspf.telemetry:Could not start Prometheus server (maybe already running?): [Errno 98] Address already in use
+INFO:pspf.ValkeyBackend:Connected to Valkey at localhost:6379 (SSL=False)
+Stream Health: {'status': 'ok', 'backend': 'connected'}
+Producing test events...
+Produced event 1770496020454-0
+Produced event 1770496020455-0
+Produced event 1770496020456-0
+Produced event 1770496020456-1
+Produced event 1770496020457-0
+Starting processor (Press Ctrl+C to stop)...
+INFO:pspf.Stream:Starting stream processor for events:user_signups...
+WARNING:pspf.ValkeyBackend:Consumer worker-1 claimed 21 stuck messages.
+INFO:pspf.BatchProcessor:Recovered 21 pending messages.
+[1770494271300-0] Processing signup for user: user_0 (user0@example.com)
+[1770494271301-0] Processing signup for user: user_1 (user1@example.com)
+[1770494271302-0] Processing signup for user: user_2 (user2@example.com)
+[1770494271302-1] Processing signup for user: user_3 (user3@example.com)
+[1770494271303-0] Processing signup for user: user_4 (user4@example.com)
+[1770494290423-0] Processing signup for user: user_0 (user0@example.com)
+[1770494290424-0] Processing signup for user: user_1 (user1@example.com)
+[1770494290424-1] Processing signup for user: user_2 (user2@example.com)
+[1770494290425-0] Processing signup for user: user_3 (user3@example.com)
+[1770494290425-1] Processing signup for user: user_4 (user4@example.com)
+[1770495848650-0] Processing signup for user: user_0 (user0@example.com)
+[1770495848651-0] Processing signup for user: user_1 (user1@example.com)
+[1770495848652-0] Processing signup for user: user_2 (user2@example.com)
+[1770495848652-1] Processing signup for user: user_3 (user3@example.com)
+[1770495848653-0] Processing signup for user: user_4 (user4@example.com)
+[1770495881608-0] Processing signup for user: user_4 (user4@example.com)
+[1770495956773-0] Processing signup for user: user_0 (user0@example.com)
+[1770495956773-1] Processing signup for user: user_1 (user1@example.com)
+[1770495956774-0] Processing signup for user: user_2 (user2@example.com)
+[1770495956774-1] Processing signup for user: user_3 (user3@example.com)
+[1770495956775-0] Processing signup for user: user_4 (user4@example.com)
+INFO:pspf.BatchProcessor:Entered run loop. Consuming from events:user_signups (Group: processor-group-1)
+INFO:pspf.BatchProcessor:Shutdown signal received. Finishing current batch...
+ERROR:pspf.ValkeyBackend:Error reading batch: Timeout reading from localhost:6379
+ERROR:pspf.BatchProcessor:Unexpected error in run_loop: Timeout reading from localhost:6379
+INFO:pspf.BatchProcessor:Processor stopped gracefully.
+INFO:pspf.ValkeyBackend:Closed Valkey connection

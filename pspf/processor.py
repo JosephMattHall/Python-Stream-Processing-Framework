@@ -39,7 +39,7 @@ class BatchProcessor:
         self.telemetry = TelemetryManager()
         self.tracer = self.telemetry.get_tracer()
 
-    def _setup_signals(self):
+    def _setup_signals(self) -> None:
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
@@ -48,7 +48,7 @@ class BatchProcessor:
                 # Windows support or special environments
                 pass
     
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """
         Initiate graceful shutdown.
 
@@ -68,7 +68,7 @@ class BatchProcessor:
     async def run_loop(self, 
                        handler: Callable[[str, Dict[str, Any]], Awaitable[None]], 
                        batch_size: int = 10, 
-                       poll_interval: float = 0.1):
+                       poll_interval: float = 0.1) -> None:
         """
         Execute the main consume-process-ack loop.
 
@@ -151,7 +151,7 @@ class BatchProcessor:
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
 
-    async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception):
+    async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception) -> None:
         """
         Handle processing failures with Retry and DLO logic.
 
@@ -175,7 +175,7 @@ class BatchProcessor:
         except Exception as inner_e:
             logger.critical(f"Failed to handle error for message {msg_id}: {inner_e}")
 
-    async def _recover_stuck_messages(self, handler: Callable[[str, Dict[str, Any]], Awaitable[None]]):
+    async def _recover_stuck_messages(self, handler: Callable[[str, Dict[str, Any]], Awaitable[None]]) -> None:
         """
         Recover messages claimed by crashed workers.
 

@@ -1,0 +1,19 @@
+INFO:pspf.telemetry:OpenTelemetry disabled via config.
+WARNING:pspf.telemetry:Could not start Prometheus server (maybe already running?): [Errno 98] Address already in use
+INFO:pspf.ValkeyBackend:Connected to Valkey at localhost:6379 (SSL=False)
+INFO:pspf.Stream:Starting stream processor for events:user_signups...
+ERROR:pspf.ValkeyBackend:Error during XAUTOCLAIM: too many values to unpack (expected 2)
+INFO:pspf.BatchProcessor:Entered run loop. Consuming from events:user_signups (Group: processor-group-1)
+INFO:pspf.BatchProcessor:Shutdown signal received. Finishing current batch...
+ERROR:pspf.ValkeyBackend:Error reading batch: Timeout reading from localhost:6379
+ERROR:pspf.BatchProcessor:Unexpected error in run_loop: Timeout reading from localhost:6379
+INFO:pspf.BatchProcessor:Processor stopped gracefully.
+INFO:pspf.ValkeyBackend:Closed Valkey connection
+Stream Health: {'status': 'ok', 'backend': 'connected'}
+Producing test events...
+Produced event 1770495956773-0
+Produced event 1770495956773-1
+Produced event 1770495956774-0
+Produced event 1770495956774-1
+Produced event 1770495956775-0
+Starting processor (Press Ctrl+C to stop)...

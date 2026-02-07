@@ -146,8 +146,23 @@ class ValkeyStreamBackend:
             stream_name, messages = streams[0]
             if not messages:
                 return []
+            
+            # Deserialize nested JSON strings
+            import json
+            parsed_messages = []
+            for msg_id, data in messages:
+                parsed_data = {}
+                for k, v in data.items():
+                    if isinstance(v, str):
+                        try:
+                            parsed_data[k] = json.loads(v)
+                        except (json.JSONDecodeError, TypeError):
+                            parsed_data[k] = v
+                    else:
+                        parsed_data[k] = v
+                parsed_messages.append((msg_id, parsed_data))
                 
-            return messages
+            return parsed_messages
         except Exception as e:
             logger.error(f"Error reading batch: {e}")
             raise
@@ -234,8 +249,18 @@ class ValkeyStreamBackend:
         Returns:
              str: The generated message ID.
         """
+        # valkey-python requires primitive types (bytes, str, int, float)
+        # We need to flatten or serialize the values if they are complex
+        safe_data = {}
+        for k, v in data.items():
+            if isinstance(v, (dict, list, bool)) or v is None:
+                import json
+                safe_data[k] = json.dumps(v)
+            else:
+                safe_data[k] = v
+
         client = self.connector.get_client()
-        msg_id = await client.xadd(self.stream_key, data, maxlen=max_len)
+        msg_id = await client.xadd(self.stream_key, safe_data, maxlen=max_len)
         return msg_id
 
     async def claim_stuck_messages(self, min_idle_time_ms: int = 60000, count: int = 10) -> List[Tuple[str, Dict[str, Any]]]:
@@ -261,7 +286,8 @@ class ValkeyStreamBackend:
             
             # We might need to loop if we really want to grab 'count' messages, 
             # but XAUTOCLAIM returns a batch usually. We'll just take one batch for simplicity to avoid implementation complexity.
-            next_id, messages = await client.xautoclaim(
+            # XAUTOCLAIM returns (next_id, messages, [deleted_ids]) depending on version/client
+            result = await client.xautoclaim(
                 name=self.stream_key,
                 groupname=self.group_name,
                 consumername=self.consumer_name,
@@ -269,10 +295,34 @@ class ValkeyStreamBackend:
                 start_id=current_id,
                 count=count
             )
+            next_id = result[0]
+            messages = result[1]
             
             if messages:
                 logger.warning(f"Consumer {self.consumer_name} claimed {len(messages)} stuck messages.")
-                return messages
+                from typing import cast
+                # xautoclaim returns list of (msg_id, data)
+                # Ensure data is deserialized if it was serialized? 
+                # xautoclaim returns raw data just like xreadgroup
+                # We need to deserialize it here too!
+                raw_messages = cast(List[Tuple[str, Dict[str, Any]]], messages)
+                
+                # Deserialize nested JSON strings
+                import json
+                parsed_messages = []
+                for msg_id, data in raw_messages:
+                    parsed_data = {}
+                    for k, v in data.items():
+                        if isinstance(v, str):
+                            try:
+                                parsed_data[k] = json.loads(v)
+                            except (json.JSONDecodeError, TypeError):
+                                parsed_data[k] = v
+                        else:
+                            parsed_data[k] = v
+                    parsed_messages.append((msg_id, parsed_data))
+                return parsed_messages
+            return []
             return []
         except Exception as e:
             logger.error(f"Error during XAUTOCLAIM: {e}")

@@ -12,18 +12,19 @@ class UserSignupEvent(BaseEvent):
     campaign_source: str = "direct"
 
 # 2. Define logic
-async def process_user_signup(event: UserSignupEvent):
+async def process_user_signup(event: UserSignupEvent) -> None:
     print(f"[{event.offset}] Processing signup for user: {event.user_id} ({event.email})")
     # Simulate work
     await asyncio.sleep(0.01)
 
 # 3. Run Pipeline
-async def main():
+async def main() -> None:
     # Setup logging
     logging.basicConfig(level=logging.INFO)
     
-    # "Dependency Injection" style config
-    stream_name = "events:user_signups"
+    # "Dependency Injection"
+    # Create Stream
+    stream_key = "events:user_signups_v2"
     group_name = "processor-group-1"
     consumer_name = "worker-1"
     
@@ -33,7 +34,8 @@ async def main():
         port=settings.VALKEY_PORT,
         password=settings.VALKEY_PASSWORD
     )
-    backend = ValkeyStreamBackend(connector, stream_name, group_name, consumer_name)
+    # Create Backend
+    backend = ValkeyStreamBackend(connector, stream_key, group_name, consumer_name)
     
     # Initialize the Stream Facade
     async with Stream(backend, schema=UserSignupEvent) as stream:

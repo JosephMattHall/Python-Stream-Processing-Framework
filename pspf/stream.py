@@ -59,7 +59,7 @@ class Stream(Generic[T]):
             logger.error(f"Health check failed: {e}")
             return {"status": "error", "reason": str(e)}
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "Stream[T]":
         """
         Async context manager entry.
         
@@ -73,7 +73,7 @@ class Stream(Generic[T]):
         await self.backend.ensure_group_exists()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
         """
         Async context manager exit.
         
@@ -109,7 +109,7 @@ class Stream(Generic[T]):
         msg_id = await self.backend.add_event(data)
         return msg_id
 
-    async def run(self, handler: Callable[[T], Awaitable[None]], batch_size: int = 10):
+    async def run(self, handler: Callable[[T], Awaitable[None]], batch_size: int = 10) -> None:
         """
         Start the infinite processing loop.
 
@@ -126,7 +126,7 @@ class Stream(Generic[T]):
         # Register the user's handler with the processor
         # We wrap it to handle deserialization
         
-        async def typed_handler(msg_id: str, raw_data: Dict[str, Any]):
+        async def typed_handler(msg_id: str, raw_data: Dict[str, Any]) -> None:
             # 1. Deserialize / Validate
             if self.schema:
                 try:
@@ -140,7 +140,9 @@ class Stream(Generic[T]):
                 # Note: raw_data might need cleanup if it has Redis artifacts? 
                 # (Valkey decode_responses=True handles bytes->str)
                 try:
-                    event = SchemaRegistry.validate(raw_data)
+                    # cast is needed because validate returns BaseModel but we expect T
+                    from typing import cast
+                    event = cast(T, SchemaRegistry.validate(raw_data))
                 except Exception as e:
                     logger.error(f"Dynamic validation failed for msg {msg_id}: {e}")
                     raise e

@@ -15,7 +15,7 @@ class TestEvent(BaseEvent):
 
 from pspf.settings import settings
 
-async def main():
+async def main() -> None:
     # settings automatically loads .env or defaults
     connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
     backend = ValkeyStreamBackend(connector, "test_stream", "test_group", "consumer_1")
@@ -37,7 +37,7 @@ async def main():
         # We will run the processor in a task and cancel it after a few seconds
         print("--- Consuming ---")
         
-        async def handler(event: TestEvent):
+        async def handler(event: TestEvent) -> None:
             print(f"Handled event: {event.val}, ID: {event.offset}")
             if event.val == 3:
                 raise ValueError("Simulated Failure!")

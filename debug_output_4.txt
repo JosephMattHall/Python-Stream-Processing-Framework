@@ -1,0 +1,23 @@
+INFO:pspf.telemetry:OpenTelemetry disabled via config.
+WARNING:pspf.telemetry:Could not start Prometheus server (maybe already running?): [Errno 98] Address already in use
+INFO:pspf.ValkeyBackend:Connected to Valkey at localhost:6379 (SSL=False)
+Stream Health: {'status': 'ok', 'backend': 'connected'}
+Producing test events...
+Produced event 1770496060127-0
+Produced event 1770496060128-0
+Produced event 1770496060129-0
+Produced event 1770496060129-1
+Produced event 1770496060130-0
+Starting processor (Press Ctrl+C to stop)...
+INFO:pspf.Stream:Starting stream processor for events:user_signups...
+WARNING:pspf.ValkeyBackend:Consumer worker-1 claimed 5 stuck messages.
+INFO:pspf.BatchProcessor:Recovered 5 pending messages.
+[1770495997697-0] Processing signup for user: user_0 (user0@example.com)
+[1770495997698-0] Processing signup for user: user_1 (user1@example.com)
+[1770495997699-0] Processing signup for user: user_2 (user2@example.com)
+[1770495997699-1] Processing signup for user: user_3 (user3@example.com)
+[1770495997700-0] Processing signup for user: user_4 (user4@example.com)
+INFO:pspf.BatchProcessor:Entered run loop. Consuming from events:user_signups (Group: processor-group-1)
+INFO:pspf.BatchProcessor:Shutdown signal received. Finishing current batch...
+INFO:pspf.BatchProcessor:Processor stopped gracefully.
+INFO:pspf.ValkeyBackend:Closed Valkey connection
