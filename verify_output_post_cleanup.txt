@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/x/projects/Python-Stream-Processing-Framework/examples/verify_refactor.py", line 3, in <module>
+    from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/__init__.py", line 1, in <module>
+    from pspf.stream import Stream
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/stream.py", line 2, in <module>
+    from pspf.connectors.valkey import ValkeyStreamBackend
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/connectors/__init__.py", line 2, in <module>
+    from pspf.connectors.base import Source, Sink
+ModuleNotFoundError: No module named 'pspf.connectors.base'

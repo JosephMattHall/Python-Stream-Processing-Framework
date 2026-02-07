@@ -1,0 +1,59 @@
+{"timestamp": "2026-02-07T01:45:07.278440Z", "level": "INFO", "logger": "pspf.telemetry", "message": "OpenTelemetry disabled via config.", "module": "telemetry", "line": 73}
+{"timestamp": "2026-02-07T01:45:07.280096Z", "level": "WARNING", "logger": "pspf.telemetry", "message": "Could not start Prometheus server (maybe already running?): [Errno 98] Address already in use", "module": "telemetry", "line": 80}
+Traceback (most recent call last):
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/connection.py", line 311, in connect
+    await self.retry.call_with_retry(
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/retry.py", line 59, in call_with_retry
+    return await do()
+           ^^^^^^^^^^
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/connection.py", line 786, in _connect
+    reader, writer = await asyncio.open_connection(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/streams.py", line 48, in open_connection
+    transport, _ = await loop.create_connection(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 1122, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 1104, in create_connection
+    sock = await self._connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 1007, in _connect_sock
+    await self.sock_connect(sock, address)
+  File "/usr/lib/python3.12/asyncio/selector_events.py", line 651, in sock_connect
+    return await fut
+           ^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/selector_events.py", line 691, in _sock_connect_cb
+    raise OSError(err, f'Connect call failed {address}')
+ConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 6379)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/x/projects/Python-Stream-Processing-Framework/examples/verify_refactor.py", line 57, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.12/asyncio/runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/asyncio/base_events.py", line 687, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/x/projects/Python-Stream-Processing-Framework/examples/verify_refactor.py", line 24, in main
+    async with Stream(backend, schema=TestEvent) as stream:
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/stream.py", line 72, in __aenter__
+    await self.backend.connector.connect() # Idempotent-ish check inside
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/connectors/valkey.py", line 49, in connect
+    await self._pool.ping()
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/client.py", line 628, in execute_command
+    conn = self.connection or await pool.get_connection(command_name, **options)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/connection.py", line 1074, in get_connection
+    await self.ensure_connection(connection)
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/connection.py", line 1107, in ensure_connection
+    await connection.connect()
+  File "/home/x/projects/Python-Stream-Processing-Framework/.venv/lib/python3.12/site-packages/valkey/asyncio/connection.py", line 319, in connect
+    raise ConnectionError(self._error_message(e))
+valkey.exceptions.ConnectionError: Error 111 connecting to localhost:6379. Connect call failed ('127.0.0.1', 6379).

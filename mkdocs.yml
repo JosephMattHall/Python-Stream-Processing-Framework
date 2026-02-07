@@ -1,0 +1,42 @@
+site_name: PSPF - Python Stream Processing Framework
+site_url: https://example.com/pspf
+site_description: Enterprise-ready stream processing with Python and Valkey.
+repo_url: https://github.com/JosephMattHall/Python-Stream-Processing-Framework
+
+theme:
+  name: material
+  palette:
+    # Primary teal, Accent purple
+    - scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - search.suggest
+    - navigation.expand
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [pspf] # Look in pspf!
+          options:
+            docstring_style: google
+
+nav:
+  - Home: index.md
+  - Tutorial: tutorial.md
+  - Architecture: architecture.md
+  - API Reference:
+      - Stream: api/stream.md
+      - Backends: api/backends.md
