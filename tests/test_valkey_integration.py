@@ -22,12 +22,20 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
         # Mock XREADGROUP response: List[Tuple[str, Dict[str, Any]]]
         # Structure: [(msg_id, data_dict), ...]
         mock_messages = [
-            ("1678888888000-0", {"event_type": "BaseEvent", "payload": "test1"}),
-            ("1678888888000-1", {"event_type": "BaseEvent", "payload": "test2"}),
+            ("1678888888000-0", {"event_type": "BaseEvent", "payload": {"data": "test1"}}),
+            ("1678888888000-1", {"event_type": "BaseEvent", "payload": {"data": "test2"}}),
         ]
         mock_client.xreadgroup.return_value = [["stream_key", mock_messages]]
         mock_client.xgroup_create = AsyncMock()
         mock_client.xack = AsyncMock()
+        
+        # Setup pipeline mock
+        # client.pipeline() is synchronous and returns the pipeline object
+        # The pipeline object is an async context manager
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__.return_value = mock_pipeline
+        mock_pipeline.__aexit__.return_value = None
+        mock_client.pipeline = MagicMock(return_value=mock_pipeline)
 
         # Mock XADD
         mock_client.xadd.return_value = "1678888888000-2"
@@ -35,10 +43,12 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
         # Mock XAUTOCLAIM
         mock_client.xautoclaim.return_value = ("0-0", [])
 
-        # Patch the ValkeyConnector constructor inside Stream to return our mock
-        with patch('pspf.stream.ValkeyConnector', return_value=mock_connector):
-            
-            async with Stream("test-stream", "group1", "consumer1") as stream:
+        # Helper to create backend with mocked connector
+        backend = ValkeyStreamBackend(mock_connector, "test-stream", "group1", "consumer1")
+        
+        # Patch to avoid real connection logic if necessary, though we mocked connector
+        
+        async with Stream(backend) as stream:
                 
                 # 1. Test Emit
                 evt = BaseEvent(event_type="TestEvent")

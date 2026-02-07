@@ -35,8 +35,6 @@ dependencies = [
     "pydantic-settings>=2.0.0",
 ]
 
-[project.scripts]
-pspf = "pspf.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework"
@@ -51,12 +49,8 @@ dev = [
   "isort",
   "ruff",
 ]
-hardened = [
-    "aiokafka>=0.8.0",
-    "gmqtt>=0.6.12",
-    "opentelemetry-api",
-    "opentelemetry-sdk",
-]
+# Removed legacy 'hardened' extras (aiokafka, gmqtt)
+
 
 [tool.mypy]
 python_version = "3.11"
