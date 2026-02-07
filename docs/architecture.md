@@ -1,63 +1,49 @@
-# PSPF Architecture
+# Architecture
 
-PSPF (Python Stream Processing Framework) is designed to bring specific "Big Data" guarantees—partitioning, ordering, and replayability—to standard Python applications without the operational overhead of managing a Kafka cluster.
+The **Python Stream Processing Framework (PSPF)** uses a **Composition-based** architecture to provide flexibility, testability, and enterprise-grade reliability.
 
-## 🎯 Core Concepts
+## Core Components
 
-### 1. The Log (`LocalLog`)
-Instead of a remote broker, PSPF uses a **Native Log**.
-- **Storage:** Data is written to local disk in `.pspf_data/`.
-- **Format:** Events are serialized using **MessagePack** (binary) with length-prefixed framing.
-- **Partitioning:** The log is split into $N$ files (`partition_0.bin`, `partition_1.bin`, ...).
-- **Hashing:** `partition = hash(key) % num_partitions`. This ensures all events for the same entity (e.g., "User 123") always go to the same file.
-
-### 2. The Record (`StreamRecord`)
-The canonical unit of data is the `StreamRecord`:
-```python
-@dataclass
-class StreamRecord:
-    id: str                  # Unique Event ID (UUID)
-    key: str                 # Partition key
-    value: Any               # Event payload (Dict)
-    timestamp: datetime      # Event creation time
-    partition: int
-    offset: int
-```
-
-### 3. Execution Model (`PartitionedExecutor`)
-PSPF enforces a strict concurrency model to preventing race conditions:
-- **Per-Partition Sequential:** A single partition is never processed concurrently. This guarantees that if "Create Item" comes before "Checkout Item" in the log, it will happen in that order.
-- **Cross-Partition Parallel:** Different partitions are processed in parallel asyncio tasks.
-
-### 4. Exactly-Once Processing
-To ensure correctness even during crashes, PSPF implements **Idempotency**:
-1.  **Deduplication Store:** Before processing an event, the system checks if `event.id` has been seen.
-2.  **At-Least-Once Delivery:** If a worker crashes, it replays from the last checkpoint. This might re-deliver the last few events.
-3.  **Result:** The Deduplication Store blocks the re-delivered events, ensuring the side effect happens exactly once.
-
-*Note: The current implementation uses an In-Memory Deduplication Store. For production durability across full system restarts, this should be swapped for a Redis or SQLite backend.*
-
-## 🧩 Component Diagram
+The system is built around three main components that are injected into the high-level `Stream` facade.
 
 ```mermaid
 graph TD
-    API[FastAPI / Producer] -->|Append(Record)| Log[LocalLog .bin]
+    UserCode[User Application] --> Stream[Stream Facade]
+    Stream --> Backend[ValkeyStreamBackend]
+    Stream --> Processor[BatchProcessor]
+    Stream --> Schema[Pydantic Schema]
     
-    subgraph "PSPF Worker"
-        Log -->|Read(Offset)| Source[LogSource]
-        Source -->|StreamRecord| Dedup{Dedup Check}
-        
-        Dedup -->|Duplicate| Skip[Skip]
-        Dedup -->|New| Proc[Processor]
-        
-        Proc -->|Update| State[(State Store)]
-        Proc -->|Commit| Offsets[OffsetStore]
-    end
+    Backend --> Connector[ValkeyConnector]
+    Connector --> DB[(Valkey/Redis)]
 ```
 
-## ⚙️ IO & Extensibility
+### 1. Stream Facade
+The `Stream` class acts as the entry point. It coordinates the other components but does not contain low-level logic itself. It handles:
+- **Dependency Injection**: Takes a configured Backend and Schema.
+- **Context Management**: `async with` support for resource cleanup.
+- **Tracing**: Automatically injects OpenTelemetry contexts.
 
-While PSPF includes a native log, the abstractions (`Log`, `Source`, `Sink`) are decoupled. You can implement:
-- **KafkaLog:** Replace `LocalLog` with a wrapper around `aiokafka` to scale to multiple servers.
-- **RedisOffsetStore:** Store consumer offsets in Redis for distributed workers.
-- **PostgresState:** Store entity state in a relational DB instead of memory.
+### 2. ValkeyBackend
+Handles all interactions with the Valkey (or Redis) server.
+- **Connector**: Manages the connection pool.
+- **Stream Operations**: `XADD`, `XREADGROUP`, `XACK`.
+- **Reliability**: Implements `XAUTOCLAIM` (Worker Recovery) and Dead Letter logic.
+
+### 3. BatchProcessor
+The engine that drives the consumption loop.
+- **Batching**: Reads messages in chunks for efficiency.
+- **Signal Handling**: Gracefully shuts down on `SIGTERM`.
+- **Observability**: Updates Prometheus metrics and starts Tracing spans.
+
+### 4. Schema (Pydantic)
+Ensures data integrity.
+- **Validation**: All incoming/outgoing data is validated against a Pydantic model.
+- **Serialization**: Automatic JSON serialization.
+
+## Data Flow
+
+1. **Emit**: User calls `stream.emit(event)`. Data is validated, tracing context is injected, and it's written to Valkey.
+2. **Consume**: `BatchProcessor` polls Valkey for a batch of messages.
+3. **Process**: Each message is deserialized into a Pydantic object and passed to the user's `handler`.
+4. **ACK**: If successful, the message is ACKed.
+5. **Failure**: If processing fails, it is retried. If retries exceed the limit, it is moved to a Dead Letter Queue (DLQ).

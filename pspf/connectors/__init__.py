@@ -1,4 +1,3 @@
-# pspf/connectors/__init__.py
-from pspf.connectors.base import Source, Sink
+from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
 
-__all__ = ["Source", "Sink"]
+__all__ = ["ValkeyConnector", "ValkeyStreamBackend"]

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/x/projects/Python-Stream-Processing-Framework/examples/verify_refactor.py", line 3, in <module>
+    from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/__init__.py", line 1, in <module>
+    from pspf.stream import Stream
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/stream.py", line 4, in <module>
+    from pspf.processor import BatchProcessor
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/processor.py", line 7, in <module>
+    from pspf.telemetry import TelemetryManager
+  File "/home/x/projects/Python-Stream-Processing-Framework/pspf/telemetry.py", line 6, in <module>
+    from opentelemetry import trace, propagation
+ImportError: cannot import name 'propagation' from 'opentelemetry' (unknown location)
