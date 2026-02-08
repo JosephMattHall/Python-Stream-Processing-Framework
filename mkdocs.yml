@@ -37,6 +37,7 @@ nav:
   - Home: index.md
   - Tutorial: tutorial.md
   - Architecture: architecture.md
+  - Roadmap: roadmap.md
   - API Reference:
       - Stream: api/stream.md
       - Backends: api/backends.md
