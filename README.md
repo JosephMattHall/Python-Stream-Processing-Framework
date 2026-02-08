@@ -8,9 +8,10 @@ It is designed for building event-driven applications, event sourcing systems, a
 
 - **Native Event Log:** Built-in file-based partitioned log. No external message broker required.
 - **Kafka-Free Architecture:** Runs entirely in Python. Data is stored in efficient binary **MessagePack** format.
-- **Exactly-Once Semantics:** Idempotent processing with deduplication to ensure events are effectively processed once.
+- **Exact-Once Semantics:** Idempotent processing with deduplication to ensure events are effectively processed once.
 - **Partitioned Concurrency:** Automatic partitioning by key ensures strict ordering for entities (e.g., "Item A") while allowing parallel processing across partitions.
 - **Event Sourcing Ready:** Perfect for building systems where state is derived from an immutable log of events.
+- **Built-in Observability:** Production-ready monitoring with Prometheus metrics, Grafana dashboards, and a lightweight Admin API.
 
 ## Installation
 
@@ -64,5 +65,6 @@ examples/
 ## Documentation
 
 - [Architecture Guide](docs/architecture.md)
+- [Observability Guide](docs/observability.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](docs/contributing.md)

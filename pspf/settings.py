@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     OTEL_ENABLED: bool = Field(default=False, validation_alias="OTEL_ENABLED")
     SERVICE_NAME: str = Field(default="pspf-service", validation_alias="OTEL_SERVICE_NAME")
     PROMETHEUS_PORT: int = Field(default=8000, validation_alias="PROMETHEUS_PORT")
+    ADMIN_PORT: int = Field(default=8001, validation_alias="ADMIN_PORT")
 
     # Operation Defaults
     DEFAULT_BATCH_SIZE: int = 10

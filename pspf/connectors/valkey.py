@@ -347,3 +347,32 @@ class ValkeyStreamBackend(StreamingBackend):
         except Exception as e:
             logger.error(f"Error during XAUTOCLAIM: {e}")
             return []
+
+    async def get_pending_info(self) -> Dict[str, Any]:
+        """
+        Retrieves lag and pending consumer group info.
+        """
+        client = self.connector.get_client()
+        info = {
+            "pending": 0,
+            "lag": 0,
+            "consumers": 0
+        }
+        try:
+            # 1. Get Pending Count (Fast)
+            pending_summary = await client.xpending(self.stream_key, self.group_name)
+            info["pending"] = pending_summary["pending"]
+
+            # 2. Get Group Info for Lag (slower, but accurate in Redis 7/Valkey)
+            # XINFO GROUPS key
+            groups = await client.xinfo_groups(self.stream_key)
+            for g in groups:
+                 if g["name"] == self.group_name:
+                     info["lag"] = g.get("lag", 0)
+                     info["consumers"] = g.get("consumers", 0)
+                     break
+            
+            return info
+        except Exception as e:
+            logger.error(f"Error getting pending info: {e}")
+            return info

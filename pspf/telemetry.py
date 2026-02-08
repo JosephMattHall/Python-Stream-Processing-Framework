@@ -44,6 +44,11 @@ class MetricsCollector:
             'Number of active consumers',
             ['stream', 'group']
         )
+        self.worker_status = Gauge(
+            'pspf_worker_status',
+            'Worker status (1=Running, 0=Stopped)',
+            ['stream', 'group', 'consumer']
+        )
 
 class TelemetryManager:
     """

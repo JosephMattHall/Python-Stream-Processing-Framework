@@ -193,3 +193,15 @@ class KafkaStreamBackend(StreamingBackend):
              payload = json.dumps(data).encode("utf-8")
              await self.producer.send_and_wait(dlq_topic, payload)
 
+    async def get_pending_info(self) -> Dict[str, Any]:
+        """
+        Retrieves lag info from Kafka.
+        Currently returns 0 as calculating lag requires admin client or partition queries.
+        """
+        # TODO: Implement actual Kafka lag calculation using high watermarks
+        return {
+            "pending": 0, 
+            "lag": 0,
+            "consumers": 1
+        }
+

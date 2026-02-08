@@ -38,6 +38,9 @@ nav:
   - Tutorial: tutorial.md
   - Architecture: architecture.md
   - Roadmap: roadmap.md
+  - Observability: observability.md
+  - Operations: operations.md
+  - CLI Reference: cli.md
   - API Reference:
       - Stream: api/stream.md
       - Backends: api/backends.md

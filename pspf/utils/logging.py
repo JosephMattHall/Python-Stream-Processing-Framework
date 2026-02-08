@@ -2,6 +2,7 @@ import logging
 import sys
 import json
 import datetime
+import os
 from typing import Any, Dict
 
 class JSONFormatter(logging.Formatter):
@@ -28,20 +29,41 @@ class JSONFormatter(logging.Formatter):
 
         return json.dumps(log_record)
 
+class ConsoleFormatter(logging.Formatter):
+    """
+    Human-readable formatter for development.
+    """
+    def format(self, record: logging.LogRecord) -> str:
+        # 2023-10-27T10:00:00 [INFO] [logger] message
+        timestamp = datetime.datetime.fromtimestamp(record.created).strftime('%Y-%m-%dT%H:%M:%S')
+        return f"{timestamp} [{record.levelname}] [{record.name}] {record.getMessage()}"
+
 def setup_logging(level: int = logging.INFO) -> None:
-    """Configures centralized JSON structured logging for PSPF."""
+    """
+    Configures centralized logging for PSPF.
+    Respects LOG_FORMAT environment variable (json/text).
+    """
+    log_format = os.getenv("LOG_FORMAT", "text").lower()
+    
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONFormatter())
+    
+    if log_format == "json":
+        handler.setFormatter(JSONFormatter())
+    else:
+        handler.setFormatter(ConsoleFormatter())
     
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     
-    # Remove existing handlers to avoid duplicates if this is called multiple times
+    # Remove existing handlers to avoid duplicates
     if root_logger.handlers:
          root_logger.handlers.clear()
          
     root_logger.addHandler(handler)
+    
+    # Silence noisy libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 def get_logger(name: str) -> logging.Logger:
     """Returns a logger instance for a given component."""

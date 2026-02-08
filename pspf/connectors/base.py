@@ -107,3 +107,13 @@ class StreamingBackend(ABC):
     async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str):
         """Move a failed message to the Dead Letter Queue."""
         pass
+
+    @abstractmethod
+    async def get_pending_info(self) -> Dict[str, Any]:
+        """
+        Retrieve information about pending messages and lag.
+        
+        Returns:
+            Dict containing 'lag', 'pending_count', etc.
+        """
+        pass

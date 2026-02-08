@@ -33,12 +33,17 @@ dependencies = [
     "opentelemetry-sdk>=1.20.0",
     "prometheus-client>=0.17.0",
     "pydantic-settings>=2.0.0",
+    "typer>=0.9.0",
+    "httpx>=0.24.0",
 ]
 
 
 [project.urls]
 Homepage = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework"
 Issues = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework/issues"
+
+[project.scripts]
+pspfctl = "pspf.cli:app"
 
 [project.optional-dependencies]
 dev = [

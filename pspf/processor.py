@@ -6,6 +6,7 @@ from pspf.utils.logging import get_logger
 from pspf.connectors.base import StreamingBackend
 from pspf.telemetry import TelemetryManager
 from opentelemetry import trace
+from pspf.settings import settings
 
 logger = get_logger("BatchProcessor")
 
@@ -38,6 +39,17 @@ class BatchProcessor:
         self._shutdown_complete = asyncio.Event()
         self.telemetry = TelemetryManager()
         self.tracer = self.telemetry.get_tracer()
+        self._paused = False
+
+    def pause(self):
+        """Pause message consumption."""
+        self._paused = True
+        logger.info("Processor paused.")
+
+    def resume(self):
+        """Resume message consumption."""
+        self._paused = False
+        logger.info("Processor resumed.")
 
     def _setup_signals(self) -> None:
         loop = asyncio.get_running_loop()
@@ -88,68 +100,160 @@ class BatchProcessor:
 
         logger.info(f"Entered run loop. Consuming from {self.backend.stream_key} (Group: {self.backend.group_name})")
 
-        while self._running:
+        # Start Admin Server
+        admin_task = asyncio.create_task(self._start_admin_server())
+        
+        # Start Lag Monitor
+        monitor_task = asyncio.create_task(self._monitor_metrics(interval=10.0))
+        
+        # Set Worker Status = 1
+        consumer_name = getattr(self.backend, 'consumer_name', 'unknown')
+        self.telemetry.metrics.worker_status.labels(
+            stream=stream_name, 
+            group=self.backend.group_name,
+            consumer=consumer_name
+        ).set(1)
+
+        try:
+            while self._running:
+                # Check Pause State
+                if self._paused:
+                     # Update status to 0 (Paused)
+                     self.telemetry.metrics.worker_status.labels(
+                        stream=stream_name, 
+                        group=self.backend.group_name,
+                        consumer=consumer_name
+                    ).set(0)
+                     await asyncio.sleep(1.0)
+                     continue
+                else:
+                     # status 1 (Running)
+                     self.telemetry.metrics.worker_status.labels(
+                        stream=stream_name, 
+                        group=self.backend.group_name,
+                        consumer=consumer_name
+                    ).set(1)
+
+                try:
+                    # 1. Read Batch
+                    READ_START = time.time()
+                    messages = await self.backend.read_batch(count=batch_size, block_ms=2000)
+                    
+                    if not messages:
+                        # Check shutdown flag again before sleeping
+                        if not self._running:
+                            break
+                        await asyncio.sleep(poll_interval)
+                        continue
+
+                    # 2. Process Batch
+                    processed_ids = []
+                    for msg_id, data in messages:
+                        PROCESS_START = time.time()
+                        
+                        # Extract Context
+                        ctx = self.telemetry.extract_context(data)
+                        
+                        # Start Span
+                        with self.tracer.start_as_current_span(
+                            "process_message", 
+                            context=ctx,
+                            attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
+                        ) as span:
+                            try:
+                                await handler(msg_id, data)
+                                processed_ids.append(msg_id)
+                                
+                                # Metrics
+                                duration = time.time() - PROCESS_START
+                                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="success").inc()
+                                self.telemetry.metrics.processing_latency.labels(stream=stream_name).observe(duration)
+                                
+                            except Exception as e:
+                                duration = time.time() - PROCESS_START
+                                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="error").inc()
+                                
+                                logger.error(f"Error processing message {msg_id}: {e}")
+                                span.record_exception(e)
+                                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                                
+                                await self._handle_processing_error(msg_id, data, e)
+
+                    # 3. ACK Batch
+                    if processed_ids:
+                        await self.backend.ack_batch(processed_ids)
+
+                except asyncio.CancelledError:
+                    logger.info("Loop cancelled.")
+                    break
+                except Exception as e:
+                    logger.error(f"Unexpected error in run_loop: {e}")
+                    await asyncio.sleep(1.0) # Backoff
+        finally:
+            monitor_task.cancel()
+            
+            # Shutdown Admin Server
+            admin_task.cancel()
+            
+            self.telemetry.metrics.worker_status.labels(
+                stream=stream_name, 
+                group=self.backend.group_name,
+                consumer=consumer_name
+            ).set(0)
             try:
-                # 1. Read Batch
-                READ_START = time.time()
-                messages = await self.backend.read_batch(count=batch_size, block_ms=2000)
-                
-                # Update lag metric occasionally (mocked or real implementation needed)
-                # self.telemetry.metrics.active_consumers.labels(stream=stream_name, group=self.backend.group_name).set(1)
-
-                if not messages:
-                    # Check shutdown flag again before sleeping
-                    if not self._running:
-                        break
-                    await asyncio.sleep(poll_interval)
-                    continue
-
-                # 2. Process Batch
-                processed_ids = []
-                for msg_id, data in messages:
-                    PROCESS_START = time.time()
-                    
-                    # Extract Context
-                    ctx = self.telemetry.extract_context(data)
-                    
-                    # Start Span
-                    with self.tracer.start_as_current_span(
-                        "process_message", 
-                        context=ctx,
-                        attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
-                    ) as span:
-                        try:
-                            await handler(msg_id, data)
-                            processed_ids.append(msg_id)
-                            
-                            # Metrics
-                            duration = time.time() - PROCESS_START
-                            self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="success").inc()
-                            self.telemetry.metrics.processing_latency.labels(stream=stream_name).observe(duration)
-                            
-                        except Exception as e:
-                            duration = time.time() - PROCESS_START
-                            self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="error").inc()
-                            
-                            logger.error(f"Error processing message {msg_id}: {e}")
-                            span.record_exception(e)
-                            span.set_status(trace.Status(trace.StatusCode.ERROR))
-                            
-                            await self._handle_processing_error(msg_id, data, e)
-
-                # 3. ACK Batch
-                if processed_ids:
-                    await self.backend.ack_batch(processed_ids)
-
+                await monitor_task
+                await admin_task
             except asyncio.CancelledError:
-                logger.info("Loop cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error in run_loop: {e}")
-                await asyncio.sleep(1.0) # Backoff
+                pass
 
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
+
+    async def _start_admin_server(self):
+        """
+        Starts the Admin API server.
+        """
+        try:
+            from uvicorn import Config, Server
+            from pspf.admin import create_admin_app
+            
+            app = create_admin_app(self)
+            config = Config(
+                app=app, 
+                host="0.0.0.0", 
+                port=settings.ADMIN_PORT, 
+                log_config=None,
+                log_level="warning" 
+            )
+            server = Server(config)
+            
+            # Disable signal handlers as we manage them
+            server.install_signal_handlers = lambda: None
+            
+            logger.info(f"Starting Admin API on port {settings.ADMIN_PORT}")
+            await server.serve()
+        except Exception as e:
+            logger.error(f"Failed to start Admin API: {e}")
+
+    async def _monitor_metrics(self, interval: float = 10.0):
+        """
+        Background task to update lag and other metrics.
+        """
+        while self._running:
+            try:
+                info = await self.backend.get_pending_info()
+                lag = info.get("lag", 0)
+                
+                self.telemetry.metrics.lag.labels(
+                    stream=self.backend.stream_key, 
+                    group=self.backend.group_name
+                ).set(lag)
+                
+                # We could also expose pending count if we added a metric for it
+            except Exception as e:
+                logger.warning(f"Error updating metrics: {e}")
+            
+            await asyncio.sleep(interval)
 
     async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception) -> None:
         """
