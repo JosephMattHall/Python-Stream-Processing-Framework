@@ -80,7 +80,9 @@ class ValkeyConnector:
         await self.close()
 
 
-class ValkeyStreamBackend:
+from .base import StreamingBackend
+
+class ValkeyStreamBackend(StreamingBackend):
     """
     Handles all Stream-related operations on top of a ValkeyConnector.
 
@@ -97,6 +99,16 @@ class ValkeyStreamBackend:
         self.consumer_name = consumer_name
         self.dlq_stream_key = f"{stream_key}-dlq"
         self.retry_tracker_key = f"pspf:retries:{group_name}:{stream_key}"
+
+    async def connect(self):
+        await self.connector.connect()
+
+    async def close(self):
+        await self.connector.close()
+
+    async def ping(self):
+        client = self.connector.get_client()
+        await client.ping()
 
     async def ensure_group_exists(self, start_id: str = "0"):
         """

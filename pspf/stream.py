@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional, Type, Generic, TypeVar, Callable, Awaitable
-from pspf.connectors.valkey import ValkeyStreamBackend
+from pspf.connectors.base import StreamingBackend
 from pspf.schema import BaseEvent, SchemaRegistry
 from pspf.processor import BatchProcessor
 from pspf.settings import settings
@@ -19,13 +19,13 @@ class Stream(Generic[T]):
     schema validation, and the processing loop.
 
     Attributes:
-        backend (ValkeyStreamBackend): The storage backend for stream operations.
+        backend (StreamingBackend): The storage backend for stream operations.
         schema (Optional[Type[T]]): Pydantic model for data validation.
         processor (BatchProcessor): Internal processor for batch handling.
         telemetry (TelemetryManager): Observability manager.
     """
     def __init__(self, 
-                 backend: ValkeyStreamBackend,
+                 backend: StreamingBackend,
                  schema: Optional[Type[T]] = None):
         """
         Initialize the Stream facade.
@@ -51,8 +51,8 @@ class Stream(Generic[T]):
                             and details.
         """
         try:
-            client = self.backend.connector.get_client()
-            await client.ping()
+            # Assuming backend has a ping method (we will add it)
+            await self.backend.ping()
             # Could also check if group exists
             return {"status": "ok", "backend": "connected"}
         except Exception as e:
@@ -69,7 +69,7 @@ class Stream(Generic[T]):
         # if the user hasn't already connected it.
         # But logically, the backend should be ready. 
         # We will ensure the group exists here.
-        await self.backend.connector.connect() # Idempotent-ish check inside
+        await self.backend.connect() # Idempotent-ish check inside
         await self.backend.ensure_group_exists()
         return self
 
@@ -82,7 +82,7 @@ class Stream(Generic[T]):
         if self.processor:
             await self.processor.shutdown()
         # We close the connection here as we "took ownership" in aenter
-        await self.backend.connector.close()
+        await self.backend.close()
 
     async def emit(self, event: BaseModel) -> str:
         """

@@ -3,7 +3,7 @@ import signal
 import time
 from typing import Callable, Awaitable, Dict, Any, List, Optional
 from pspf.utils.logging import get_logger
-from pspf.connectors.valkey import ValkeyStreamBackend
+from pspf.connectors.base import StreamingBackend
 from pspf.telemetry import TelemetryManager
 from opentelemetry import trace
 
@@ -20,10 +20,10 @@ class BatchProcessor:
     - Worker Recovery (XAUTOCLAIM)
 
     Attributes:
-        backend (ValkeyStreamBackend): The backend to consume from.
+        backend (StreamingBackend): The backend to consume from.
         max_retries (int): Max attempts before moving to DLO.
     """
-    def __init__(self, backend: ValkeyStreamBackend, max_retries: int = 3):
+    def __init__(self, backend: StreamingBackend, max_retries: int = 3):
         """
         Initialize the BatchProcessor.
 
