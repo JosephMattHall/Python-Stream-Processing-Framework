@@ -34,6 +34,18 @@ class StreamingBackend(ABC):
     Any new backend (Kafka, Pulsar, Memory, etc.) must implement these methods.
     """
     
+    @property
+    @abstractmethod
+    def stream_key(self) -> str:
+        """Name of the stream/topic."""
+        pass
+
+    @property
+    @abstractmethod
+    def group_name(self) -> str:
+        """Name of the consumer group."""
+        pass
+
     @abstractmethod
     async def connect(self):
         """Establish connection to the backend."""

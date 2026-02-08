@@ -94,11 +94,19 @@ class ValkeyStreamBackend(StreamingBackend):
     """
     def __init__(self, connector: ValkeyConnector, stream_key: str, group_name: str, consumer_name: str):
         self.connector = connector
-        self.stream_key = stream_key
-        self.group_name = group_name
+        self._stream_key = stream_key
+        self._group_name = group_name
         self.consumer_name = consumer_name
         self.dlq_stream_key = f"{stream_key}-dlq"
         self.retry_tracker_key = f"pspf:retries:{group_name}:{stream_key}"
+
+    @property
+    def stream_key(self) -> str:
+        return self._stream_key
+
+    @property
+    def group_name(self) -> str:
+        return self._group_name
 
     async def connect(self):
         await self.connector.connect()
