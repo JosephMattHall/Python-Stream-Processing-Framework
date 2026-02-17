@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  valkey:
+    image: valkey/valkey:7.2
+    ports:
+      - "6379:6379"
+
+  node-1:
+    build: .
+    command: python examples/ha_demo.py
+    environment:
+      - NODE_ID=node-1
+      - HOST=node-1
+      - ADMIN_PORT=8001
+      - VALKEY_HOST=valkey
+      - LOG_FORMAT=json
+    ports:
+      - "8001:8001"
+    depends_on:
+      - valkey
+    volumes:
+      - ./data:/app/data
+
+  node-2:
+    build: .
+    command: python examples/ha_demo.py
+    environment:
+      - NODE_ID=node-2
+      - HOST=node-2
+      - ADMIN_PORT=8002
+      - VALKEY_HOST=valkey
+      - LOG_FORMAT=json
+    ports:
+      - "8002:8002"
+    depends_on:
+      - valkey
+    volumes:
+      - ./data:/app/data

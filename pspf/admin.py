@@ -1,6 +1,7 @@
 from typing import Dict, Any, TYPE_CHECKING
 from fastapi import FastAPI, HTTPException
 from pspf.utils.logging import get_logger
+from pspf.models import StreamRecord
 
 if TYPE_CHECKING:
     from pspf.processor import BatchProcessor
@@ -39,11 +40,27 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
     @app.get("/control/status")
     async def worker_status() -> Dict[str, Any]:
         """Detailed status of the worker."""
-        # We could expose more internal stats here
         return {
             "running": processor._running,
             "paused": processor._paused,
-            "backend": processor.backend.stream_key
+            # Handle backend that might not have stream_key
+            "backend": getattr(processor.backend, "stream_key", "unknown")
         }
+
+    @app.post("/internal/replicate")
+    async def replicate_record(record: StreamRecord) -> Dict[str, str]:
+        """
+        Internal endpoint for receiving replicated records from the leader.
+        """
+        try:
+            # We assume the processor has 'replicated_log' attached if HA is enabled
+            if hasattr(processor, "replicated_log") and processor.replicated_log:
+                 await processor.replicated_log.append_follower(record)
+                 return {"status": "acked"}
+            else:
+                 raise HTTPException(status_code=501, detail="Replication not enabled on this node")
+        except Exception as e:
+            logger.error(f"Replication failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     return app
