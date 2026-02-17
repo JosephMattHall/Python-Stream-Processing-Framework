@@ -16,7 +16,16 @@ class TestEnterpriseFeatures(unittest.IsolatedAsyncioTestCase):
         self.mock_client = AsyncMock()
         self.mock_connector.get_client.return_value = self.mock_client
         self.mock_connector.connect = AsyncMock()
-        self.mock_connector.close = AsyncMock()
+        # Configure pipeline mock
+        self.mock_pipeline = MagicMock()
+        self.mock_pipeline.__aenter__ = AsyncMock(return_value=self.mock_pipeline)
+        self.mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        
+        self.mock_pipeline.xack = MagicMock()
+        self.mock_pipeline.hdel = MagicMock()
+        self.mock_pipeline.execute = AsyncMock() 
+        
+        self.mock_client.pipeline.return_value = self.mock_pipeline
         
         # Helper to create backend with mocked connector
         self.backend = ValkeyStreamBackend(self.mock_connector, "test-stream", "group1", "consumer1")

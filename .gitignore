@@ -162,3 +162,12 @@ example_input.txt
 .pspf_data*
 *.bin
 *.log
+# PSPF Instance Data 
+data/
+*.db
+*.db-journal
+debug_output*.txt
+verify_output*.txt
+.pspf_checkpoints/
+.pspf_data_courier/
+.pspf_data_fraud/

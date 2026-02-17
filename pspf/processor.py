@@ -7,6 +7,9 @@ from pspf.connectors.base import StreamingBackend
 from pspf.telemetry import TelemetryManager
 from opentelemetry import trace
 from pspf.settings import settings
+from pspf.state.store import StateStore
+from pspf.context import Context
+import inspect
 
 logger = get_logger("BatchProcessor")
 
@@ -23,8 +26,10 @@ class BatchProcessor:
     Attributes:
         backend (StreamingBackend): The backend to consume from.
         max_retries (int): Max attempts before moving to DLO.
+        min_idle_time_ms (int): Min idle time for message recovery. Default 60000.
+        state_store (StateStore): Optional state backend.
     """
-    def __init__(self, backend: StreamingBackend, max_retries: int = 3):
+    def __init__(self, backend: StreamingBackend, max_retries: int = 3, min_idle_time_ms: int = 60000, state_store: Optional[StateStore] = None):
         """
         Initialize the BatchProcessor.
 
@@ -34,10 +39,12 @@ class BatchProcessor:
         """
         self.backend = backend
         self.max_retries = max_retries
+        self.min_idle_time_ms = min_idle_time_ms
         self._running = False
         self._shutdown_event = asyncio.Event()
         self._shutdown_complete = asyncio.Event()
         self.telemetry = TelemetryManager()
+        self.state_store = state_store
         self.tracer = self.telemetry.get_tracer()
         self._paused = False
 
@@ -98,6 +105,9 @@ class BatchProcessor:
         # initial recovery check
         await self._recover_stuck_messages(handler)
 
+        if self.state_store:
+            await self.state_store.start()
+
         logger.info(f"Entered run loop. Consuming from {self.backend.stream_key} (Group: {self.backend.group_name})")
 
         # Start Admin Server
@@ -149,35 +159,8 @@ class BatchProcessor:
                     # 2. Process Batch
                     processed_ids = []
                     for msg_id, data in messages:
-                        PROCESS_START = time.time()
-                        
-                        # Extract Context
-                        ctx = self.telemetry.extract_context(data)
-                        
-                        # Start Span
-                        with self.tracer.start_as_current_span(
-                            "process_message", 
-                            context=ctx,
-                            attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
-                        ) as span:
-                            try:
-                                await handler(msg_id, data)
-                                processed_ids.append(msg_id)
-                                
-                                # Metrics
-                                duration = time.time() - PROCESS_START
-                                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="success").inc()
-                                self.telemetry.metrics.processing_latency.labels(stream=stream_name).observe(duration)
-                                
-                            except Exception as e:
-                                duration = time.time() - PROCESS_START
-                                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="error").inc()
-                                
-                                logger.error(f"Error processing message {msg_id}: {e}")
-                                span.record_exception(e)
-                                span.set_status(trace.Status(trace.StatusCode.ERROR))
-                                
-                                await self._handle_processing_error(msg_id, data, e)
+                        if await self._process_single_message(handler, msg_id, data, stream_name):
+                            processed_ids.append(msg_id)
 
                     # 3. ACK Batch
                     if processed_ids:
@@ -205,6 +188,9 @@ class BatchProcessor:
                 await admin_task
             except asyncio.CancelledError:
                 pass
+
+        if self.state_store:
+            await self.state_store.stop()
 
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
@@ -255,6 +241,47 @@ class BatchProcessor:
             
             await asyncio.sleep(interval)
 
+    async def _process_single_message(self, handler: Callable, msg_id: str, data: Dict[str, Any], stream_name: str) -> bool:
+        """
+        Process a single message with context injection, telemetry, and error handling.
+        Returns True if successful, False otherwise.
+        """
+        PROCESS_START = time.time()
+        ctx = self.telemetry.extract_context(data)
+        
+        with self.tracer.start_as_current_span(
+            "process_message", 
+            context=ctx,
+            attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
+        ) as span:
+            try:
+                # Inspect handler signature to see if it wants context
+                sig = inspect.signature(handler)
+                if len(sig.parameters) >= 3:
+                    # Stateful: handler(msg_id, data, ctx)
+                    processing_ctx = Context(state=self.state_store)
+                    await handler(msg_id, data, processing_ctx)
+                else:
+                    # Stateless: handler(msg_id, data)
+                    await handler(msg_id, data)
+
+                # Metrics
+                duration = time.time() - PROCESS_START
+                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="success").inc()
+                self.telemetry.metrics.processing_latency.labels(stream=stream_name).observe(duration)
+                return True
+
+            except Exception as e:
+                duration = time.time() - PROCESS_START
+                self.telemetry.metrics.messages_processed.labels(stream=stream_name, status="error").inc()
+                
+                logger.error(f"Error processing message {msg_id}: {e}")
+                span.record_exception(e)
+                span.set_status(trace.Status(trace.StatusCode.ERROR))
+                
+                await self._handle_processing_error(msg_id, data, e)
+                return False
+
     async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception) -> None:
         """
         Handle processing failures with Retry and DLO logic.
@@ -289,18 +316,14 @@ class BatchProcessor:
             handler (Callable): The processing function.
         """
         try:
-            # Try to claim messages that have been idle > 60s
-            messages = await self.backend.claim_stuck_messages(min_idle_time_ms=60000, count=50)
+            # Try to claim messages that have been idle > min_idle_time_ms
+            messages = await self.backend.claim_stuck_messages(min_idle_time_ms=self.min_idle_time_ms, count=50)
             if messages:
                 logger.info(f"Recovered {len(messages)} pending messages.")
                 processed_ids = []
                 for msg_id, data in messages:
-                    try:
-                        await handler(msg_id, data)
+                    if await self._process_single_message(handler, msg_id, data, self.backend.stream_key):
                         processed_ids.append(msg_id)
-                    except Exception as e:
-                        logger.error(f"Failed to process recovered message {msg_id}: {e}")
-                        await self._handle_processing_error(msg_id, data, e)
                 
                 if processed_ids:
                     await self.backend.ack_batch(processed_ids)
