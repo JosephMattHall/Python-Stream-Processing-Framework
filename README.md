@@ -6,12 +6,12 @@ It is designed for building event-driven applications, event sourcing systems, a
 
 ## Key Features
 
-- **Native Event Log:** Built-in file-based partitioned log. No external message broker required.
-- **Kafka-Free Architecture:** Runs entirely in Python. Data is stored in efficient binary **MessagePack** format.
-- **Exact-Once Semantics:** Idempotent processing with deduplication to ensure events are effectively processed once.
-- **Partitioned Concurrency:** Automatic partitioning by key ensures strict ordering for entities (e.g., "Item A") while allowing parallel processing across partitions.
-- **Event Sourcing Ready:** Perfect for building systems where state is derived from an immutable log of events.
-- **Built-in Observability:** Production-ready monitoring with Prometheus metrics, Grafana dashboards, and a lightweight Admin API.
+- **Valkey-Based Streams:** Production-ready stream processing using Valkey (or Redis) as the message broker.
+- **Kafka-like Semantics:** Partitions, consumer groups, and high-performance throughput.
+- **Exactly-Once Semantics:** Idempotent processing with built-in deduplication.
+- **Partitioned Concurrency:** Automatic load balancing across consumer instances.
+- **Built-in Observability:** Prometheus metrics, Grafana dashboards, and Admin API.
+- **Native Event Log (Preview):** Lightweight file-based log for local-only use cases.
 
 ## Installation
 
@@ -19,48 +19,44 @@ It is designed for building event-driven applications, event sourcing systems, a
 pip install .
 ```
 
-## Quick Start: Inventory System
+## Quick Start: User Signups
 
-PSPF includes a complete **Inventory Management System** example that demonstrates optimistic concurrency, rollback/compensation, and event sourcing.
+PSPF makes it easy to handle high-volume event streams. Here is a simple processor that handles user signups.
 
-### 1. Run the API & Worker
-The example starts a FastAPI server and a background PSPF worker.
-
+### 1. Requirements
+Ensure you have Valkey (or Redis) running:
 ```bash
-uvicorn examples.inventory_app.api:app --host 0.0.0.0 --port 8000
+docker run -d -p 6379:6379 valkey/valkey:latest
 ```
 
-### 2. Run the Verification Script
-This script creates items, checks them in/out, and tests the "No Negative Stock" invariant by attempting an overdraft.
+### 2. Run the Demo
+The included `valkey_demo.py` example demonstrates a producer and consumer running together.
 
 ```bash
-python examples/inventory_app/verify.py
+python examples/valkey_demo.py
 ```
+
+### 3. Verification
+You will see logs showing events being produced and then consumed with their respective offsets.
 
 ## How It Works
 
-1.  **Producers** (like a Web API) append events to the **Native Log** (`LocalLog`).
-    *   Events are sharded into partitions based on their Key (e.g., Item ID).
-    *   Data is stored on disk in binary MessagePack format for speed.
-2.  **Workers** (`LogSource`) read from the log.
-    *   Each partition is processed sequentially to guarantee order.
-    *   Consumer groups track **Offsets** to know where they left off.
-3.  **Processors** apply events to state.
-    *   If a process crashes, it restarts and replays from the last committed offset.
-    *   Deduplication ensures crashed events aren't processed twice.
+1.  **Producers** emit events to a **Stream** using a specific **Backend** (e.g., `ValkeyStreamBackend`).
+2.  **Workers** consume from the stream in **Consumer Groups**, sharing the load across multiple instances.
+3.  **Processors** handle message batches, providing built-in retries, deduplication, and dead-letter routing.
+4.  **Observability** is baked in; every processed message updates metrics and traces.
 
 ## Project Structure
 
 ```text
 pspf/
-├── log/          # Native Log implementation (MessagePack/File-based)
-├── runtime/      # Execution engine (PartitionedExecutor, Dedup)
-├── connectors/   # IO adapters (LogSource, etc.)
-└── models.py     # StreamRecord definition
-
-examples/
-└── inventory_app/ # Full Event Sourcing Application
+├── connectors/   # Backend implementations (Valkey, Kafka, Memory)
+├── processing/   # Core logic (BatchProcessor, DLO, Retries)
+├── state/        # Stateful processing backends (SQLite, etc.)
+└── stream.py     # Main Stream facade
 ```
+
+Check out the [Tutorial](docs/tutorial.md) for a deeper dive.
 
 ## Documentation
 

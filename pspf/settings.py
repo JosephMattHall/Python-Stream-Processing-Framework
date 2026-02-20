@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     VALKEY_SSL: bool = Field(default=False, validation_alias="VALKEY_SSL")
     VALKEY_SSL_CA_CERTS: Optional[str] = Field(default=None, validation_alias="VALKEY_SSL_CA_CERTS")
     VALKEY_SSL_CERT_REQS: str = Field(default="required", validation_alias="VALKEY_SSL_CERT_REQS")
+    VALKEY_SOCKET_TIMEOUT: Optional[float] = Field(default=10.0, validation_alias="VALKEY_SOCKET_TIMEOUT")
 
     # Telemetry
     OTEL_ENABLED: bool = Field(default=False, validation_alias="OTEL_ENABLED")

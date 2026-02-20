@@ -43,7 +43,9 @@ class ValkeyConnector:
                 ssl=settings.VALKEY_SSL,
                 ssl_ca_certs=settings.VALKEY_SSL_CA_CERTS,
                 ssl_cert_reqs=settings.VALKEY_SSL_CERT_REQS,
-                decode_responses=True
+                decode_responses=True,
+                socket_timeout=settings.VALKEY_SOCKET_TIMEOUT,
+                socket_connect_timeout=settings.VALKEY_SOCKET_TIMEOUT
             )
             # Fail fast if connection is bad
             await self._pool.ping()

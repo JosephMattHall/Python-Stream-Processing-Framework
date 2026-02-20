@@ -36,11 +36,22 @@ plugins:
 nav:
   - Home: index.md
   - Tutorial: tutorial.md
+  - Examples: examples.md
+  - Feature Guides:
+      - Reliability & EOS: reliability.md
+      - Partitioned Concurrency: concurrency.md
+      - Stateful Processing: state.md
+  - Backends: 
+      - Overview: backends-overview.md
+      - API Reference: api/backends.md
   - Architecture: architecture.md
-  - Roadmap: roadmap.md
-  - Observability: observability.md
-  - Operations: operations.md
+  - Project Structure: project-structure.md
+  - Operations & Observability:
+      - Overview: operations.md
+      - Deployment Guide: deployment.md
+      - Observability Guide: observability.md
   - CLI Reference: cli.md
   - API Reference:
       - Stream: api/stream.md
-      - Backends: api/backends.md
+  - Roadmap: roadmap.md
+  - Contributing: contributing.md
