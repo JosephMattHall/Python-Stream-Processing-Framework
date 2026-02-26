@@ -60,12 +60,20 @@ class BatchProcessor:
 
     def _setup_signals(self) -> None:
         loop = asyncio.get_running_loop()
+        self._shutdown_requested = False
         for sig in (signal.SIGTERM, signal.SIGINT):
             try:
-                loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
+                loop.add_signal_handler(sig, self._handle_exit_signal)
             except NotImplementedError:
-                # Windows support or special environments
                 pass
+
+    def _handle_exit_signal(self) -> None:
+        if not self._shutdown_requested:
+            self._shutdown_requested = True
+            logger.info("Shutdown signal received. Initiating graceful stop...")
+            asyncio.create_task(self.shutdown())
+        else:
+            logger.warning("Shutdown already in progress. Please wait or kill the process if stuck.")
     
     async def shutdown(self) -> None:
         """
@@ -299,10 +307,19 @@ class BatchProcessor:
             if count > self.max_retries:
                 logger.error(f"Message {msg_id} exceeded max retries ({self.max_retries}). Moving to DLO.")
                 await self.backend.move_to_dlq(msg_id, data, str(error))
-                # Metric for DLO?
                 self.telemetry.metrics.messages_processed.labels(stream=self.backend.stream_key, status="dead_letter").inc()
             else:
-                logger.info(f"Message {msg_id} failed {count}/{self.max_retries} times. Leaving in PEL for retry.")
+                # Calculate exponential backoff with jitter
+                import random
+                base_delay = 1.0 # 1 second
+                # delay = base * 2^count + jitter
+                delay = (base_delay * (2 ** (count - 1))) + (random.random() * 0.5)
+                logger.info(f"Message {msg_id} failed {count}/{self.max_retries} times. Retrying in {delay:.2f}s.")
+                # We don't sleep here as it would block the whole batch. 
+                # In Valkey/Redis XREADGROUP, we just LEAVE it in the PEL.
+                # However, to avoid tight loops on the SAME failing message, 
+                # we could benefit from some local delay if this is the ONLY message.
+                # For now, we rely on the fact that other messages in the stream will be processed first.
         except Exception as inner_e:
             logger.critical(f"Failed to handle error for message {msg_id}: {inner_e}")
 

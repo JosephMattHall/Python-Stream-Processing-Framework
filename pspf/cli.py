@@ -10,6 +10,8 @@ from datetime import datetime
 # Import LocalLog for inspection
 from pspf.log.local_log import LocalLog
 from pspf.utils.logging import setup_logging
+from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
+from pspf.settings import settings
 
 app = typer.Typer(help="PSPF Control Interface")
 
@@ -91,6 +93,89 @@ def _send_control(base_url: str, action: str):
             typer.echo(f"⚠️  Failed to {action}: {r.status_code} {r.text}")
     except httpx.RequestError as e:
         typer.echo(f"❌ Connection error: {e}")
+
+@app.command()
+def groups(stream: str = typer.Argument(..., help="Stream name to query")):
+    """Lists consumer groups for a given stream."""
+    async def _groups():
+        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+        async with connector:
+            client = connector.get_client()
+            try:
+                groups = await client.xinfo_groups(stream)
+                if not groups:
+                    typer.echo(f"No consumer groups found for stream '{stream}'.")
+                    return
+                
+                typer.echo(f"--- Consumer Groups for '{stream}' ---")
+                for g in groups:
+                    typer.echo(f"Name: {g['name']} | Consumers: {g['consumers']} | Pending: {g['pending']} | Lag: {g.get('lag', 'N/A')}")
+            except Exception as e:
+                typer.echo(f"Error: {e}")
+    
+    asyncio.run(_groups())
+
+@app.command()
+def reset(
+    stream: str = typer.Argument(..., help="Stream name"),
+    group: str = typer.Argument(..., help="Consumer group name"),
+    offset: str = typer.Argument("0", help="Offset to reset to (0, $, or specific ID)")
+):
+    """Resets the offset for a consumer group."""
+    async def _reset():
+        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+        async with connector:
+            client = connector.get_client()
+            try:
+                await client.xgroup_setid(stream, group, offset)
+                typer.echo(f"✅ Reset group '{group}' on stream '{stream}' to offset '{offset}'.")
+            except Exception as e:
+                typer.echo(f"❌ Failed to reset offset: {e}")
+                
+    asyncio.run(_reset())
+
+@app.command()
+def replay(
+    stream: str = typer.Argument(..., help="Source stream (e.g. 'orders')"),
+    group: str = typer.Argument(..., help="Consumer group that failed"),
+    limit: int = typer.Option(100, help="Max messages to replay")
+):
+    """Replays messages from DLQ back to the main stream."""
+    dlq_stream = f"{stream}-dlq"
+    
+    async def _replay():
+        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+        async with connector:
+            client = connector.get_client()
+            try:
+                # 1. Read from DLQ (using 0 to read all)
+                # Note: We read as 0-0 since it's not a group read usually for DLQ inspection
+                messages = await client.xrange(dlq_stream, min="-", max="+", count=limit)
+                if not messages:
+                    typer.echo(f"No messages found in DLQ '{dlq_stream}'.")
+                    return
+                
+                typer.echo(f"Found {len(messages)} messages in {dlq_stream}. Replaying...")
+                
+                replayed_count = 0
+                for msg_id, data in messages:
+                    # Clean up DLQ metadata before re-injecting? 
+                    # Usually better to keep it so we know it was replayed.
+                    # Remove internal keys if they start with _ and were added by DLQ logic
+                    new_data = {k: v for k, v in data.items() if not k.startswith("_")}
+                    
+                    # Add to main stream
+                    await client.xadd(stream, new_data)
+                    
+                    # Remove from DLQ
+                    await client.xdel(dlq_stream, msg_id)
+                    replayed_count += 1
+                
+                typer.echo(f"✅ Successfully replayed {replayed_count} messages to '{stream}'.")
+            except Exception as e:
+                typer.echo(f"❌ Replay failed: {e}")
+
+    asyncio.run(_replay())
 
 if __name__ == "__main__":
     app()

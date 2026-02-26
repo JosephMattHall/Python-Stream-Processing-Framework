@@ -7,7 +7,7 @@ import time
 import multiprocessing
 from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
 from pspf.processor import BatchProcessor
-from pspf.state.backends.sqlite import SQLiteStateStore
+from pspf.state.backends.sqlite_store import SQLiteStateStore
 from pspf.context import Context
 from pspf.utils.logging import setup_logging, get_logger
 

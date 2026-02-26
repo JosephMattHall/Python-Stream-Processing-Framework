@@ -35,12 +35,14 @@ plugins:
 
 nav:
   - Home: index.md
+  - Deep Dive: deep-dive.md
   - Tutorial: tutorial.md
   - Examples: examples.md
   - Feature Guides:
       - Reliability & EOS: reliability.md
       - Partitioned Concurrency: concurrency.md
       - Stateful Processing: state.md
+      - Schema Evolution: schema-evolution.md
   - Backends: 
       - Overview: backends-overview.md
       - API Reference: api/backends.md

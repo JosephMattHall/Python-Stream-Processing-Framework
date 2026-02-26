@@ -25,8 +25,13 @@ class SQLiteStateStore(StateStore):
             os.makedirs(dirname)
             
         self._db = await aiosqlite.connect(self.path)
+        # Main KV table
         await self._db.execute(
             f"CREATE TABLE IF NOT EXISTS {self.table_name} (key TEXT PRIMARY KEY, value BLOB)"
+        )
+        # Offset tracking table
+        await self._db.execute(
+            "CREATE TABLE IF NOT EXISTS pspf_offsets (stream_id TEXT, group_id TEXT, offset TEXT, PRIMARY KEY (stream_id, group_id))"
         )
         await self._db.commit()
         logger.info(f"Opened SQLite State Store at {self.path}")
@@ -83,3 +88,26 @@ class SQLiteStateStore(StateStore):
     async def flush(self):
         if self._db:
             await self._db.commit()
+
+    async def checkpoint(self, stream_id: str, group_id: str, offset: str):
+        """
+        Atomically store the offset. 
+        Note: If multiple puts were done without commit, this commit will finalize them too.
+        """
+        if not self._db: raise RuntimeError("Store not started")
+        
+        await self._db.execute(
+            "INSERT OR REPLACE INTO pspf_offsets (stream_id, group_id, offset) VALUES (?, ?, ?)",
+            (stream_id, group_id, offset)
+        )
+        await self._db.commit()
+
+    async def get_checkpoint(self, stream_id: str, group_id: str) -> Optional[str]:
+        if not self._db: raise RuntimeError("Store not started")
+        
+        async with self._db.execute(
+            "SELECT offset FROM pspf_offsets WHERE stream_id = ? AND group_id = ?",
+            (stream_id, group_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None

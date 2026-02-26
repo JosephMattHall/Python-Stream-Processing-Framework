@@ -75,7 +75,8 @@ class LocalLog(Log):
     def _recover_partition_sync(self, partition: int) -> None:
         """
         Synchronous startup recovery.
-        Scans segments to find the high water mark and truncates corrupt tail.
+        Scans all segments to verify integrity and find the high water mark.
+        Truncates corrupt tails in segments if found.
         """
         segments = self._list_segments(partition)
         
@@ -87,46 +88,54 @@ class LocalLog(Log):
             self._next_offsets[partition] = 0
             return
 
-        # We assume archived segments (all but last) are immutable and valid (simplification).
-        # We only strictly Validate/Recover the LAST segment (active).
-        last_start_offset, last_path = segments[-1]
+        total_valid_records = 0
         
-        valid_records_in_last = 0
+        # Validate segments sequentially
+        # For performance, we could skip archived segments, but for Beta RC1 
+        # integrity is paramount. We scan the LAST segment for sure.
+        # We also check if earlier segments are "complete" (no fragments at end).
         
-        # Scan the last segment to find end and validate
-        with open(last_path, 'r+b') as f:
-            while True:
-                pos = f.tell()
-                header = f.read(8) # 4 bytes len + 4 bytes crc
-                if not header or len(header) < 8:
-                    if len(header) > 0:
-                        logger.warning(f"Truncating partial header at end of {last_path.name} (offset {pos})")
+        for idx, (seg_start_offset, seg_path) in enumerate(segments):
+            valid_in_seg = 0
+            is_last = (idx == len(segments) - 1)
+            
+            with open(seg_path, 'r+b') as f:
+                while True:
+                    pos = f.tell()
+                    header = f.read(8) # 4 bytes len + 4 bytes crc
+                    if not header or len(header) < 8:
+                        if len(header) > 0:
+                            logger.warning(f"Truncating partial header at end of {seg_path.name} (pos {pos})")
+                            f.seek(pos)
+                            f.truncate()
+                        break
+                    
+                    length = struct.unpack(">I", header[0:4])[0]
+                    stored_crc = struct.unpack(">I", header[4:8])[0]
+                    
+                    payload = f.read(length)
+                    if len(payload) < length:
+                        logger.warning(f"Truncating partial payload at end of {seg_path.name} (pos {pos})")
                         f.seek(pos)
                         f.truncate()
-                    break
-                
-                length = struct.unpack(">I", header[0:4])[0]
-                stored_crc = struct.unpack(">I", header[4:8])[0]
-                
-                payload = f.read(length)
-                if len(payload) < length:
-                    logger.warning(f"Truncating partial payload at end of {last_path.name} (offset {pos})")
-                    f.seek(pos)
-                    f.truncate()
-                    break
-                
-                # Checksum verify
-                computed_crc = zlib.crc32(payload) & 0xffffffff
-                if computed_crc != stored_crc:
-                    logger.error(f"CRC Mismatch at offset {pos} in {last_path.name}. Truncating.")
-                    f.seek(pos)
-                    f.truncate()
-                    break
-                
-                valid_records_in_last += 1
+                        break
+                    
+                    # Checksum verify
+                    computed_crc = zlib.crc32(payload) & 0xffffffff
+                    if computed_crc != stored_crc:
+                        logger.error(f"CRC Mismatch at pos {pos} in {seg_path.name}. Truncating.")
+                        f.seek(pos)
+                        f.truncate()
+                        break
+                    
+                    valid_in_seg += 1
+            
+            # The start_offset of the segment + valid records we found
+            # should ideally match the next segment's start offset.
+            total_valid_records = seg_start_offset + valid_in_seg
 
-        self._next_offsets[partition] = last_start_offset + valid_records_in_last
-        logger.info(f"Partition {partition} recovered. Next Offset: {self._next_offsets[partition]}")
+        self._next_offsets[partition] = total_valid_records
+        logger.info(f"Partition {partition} recovered. High Watermark: {self._next_offsets[partition]}")
 
     async def _get_active_segment_path(self, partition: int) -> Path:
         """

@@ -56,6 +56,9 @@ dev = [
   "ruff",
 ]
 # Removed legacy 'hardened' extras (aiokafka, gmqtt)
+rocksdb = [
+    "rocksdb-python>=0.1.0"
+]
 
 
 [tool.mypy]

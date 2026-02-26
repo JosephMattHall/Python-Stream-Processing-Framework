@@ -2,7 +2,7 @@ import asyncio
 import unittest
 import os
 import shutil
-from pspf.state.backends.sqlite import SQLiteStateStore
+from pspf.state.backends.sqlite_store import SQLiteStateStore
 
 class TestSQLiteStateStore(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

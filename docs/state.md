@@ -6,6 +6,7 @@ PSPF supports **Stateful Stream Processing**, allowing your handlers to maintain
 
 State is managed via a `StateStore` interface. Currently supported backends:
 - **SQLite**: Local, file-based state (perfect for small-to-medium datasets).
+- **RocksDB**: High-performance, embedded Key-Value store (recommended for high-throughput stateful processing).
 - **In-Memory**: Fast, but state is lost on restart.
 
 ## Using State in Handlers

@@ -11,13 +11,18 @@ class JSONFormatter(logging.Formatter):
     """
     def format(self, record: logging.LogRecord) -> str:
         log_record: Dict[str, Any] = {
-            "timestamp": datetime.datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
             "module": record.module,
             "line": record.lineno,
+            "pid": os.getpid(),
         }
+
+        # Include custom attributes from 'extra'
+        if hasattr(record, 'extra'):
+             log_record.update(record.extra) # type: ignore
 
         # Include exception info if present
         if record.exc_info:

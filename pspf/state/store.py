@@ -40,3 +40,18 @@ class StateStore(ABC):
     async def flush(self):
         """Force write to durable storage."""
         pass
+
+    @abstractmethod
+    async def checkpoint(self, stream_id: str, group_id: str, offset: str):
+        """
+        Atomically store the processing offset.
+        In persistent stores, this should be in the same transaction as state updates.
+        """
+        pass
+
+    @abstractmethod
+    async def get_checkpoint(self, stream_id: str, group_id: str) -> Optional[str]:
+        """
+        Retrieve the last processed offset for a given stream and group.
+        """
+        pass
