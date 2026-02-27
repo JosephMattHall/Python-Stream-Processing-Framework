@@ -47,6 +47,29 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
             "backend": getattr(processor.backend, "stream_key", "unknown")
         }
 
+    @app.get("/cluster/status")
+    async def cluster_status() -> Dict[str, Any]:
+        """Returns detailed cluster and partition status."""
+        status: Dict[str, Any] = {
+            "ha_enabled": False,
+            "node_id": None,
+            "nodes": [],
+            "held_partitions": []
+        }
+        
+        if hasattr(processor, "replicated_log") and processor.replicated_log:
+            try:
+                coordinator = processor.replicated_log._coordinator # type: ignore
+                status["ha_enabled"] = True
+                status["node_id"] = coordinator.node_id
+                status["held_partitions"] = coordinator._held_partitions
+                status["nodes"] = await coordinator.get_other_nodes()
+            except Exception as e:
+                logger.error(f"Error fetching cluster status: {e}")
+                status["error"] = str(e)
+                
+        return status
+
     @app.post("/internal/replicate")
     async def replicate_record(record: StreamRecord) -> Dict[str, str]:
         """

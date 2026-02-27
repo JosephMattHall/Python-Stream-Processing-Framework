@@ -6,6 +6,8 @@ from pspf.settings import settings
 from pspf.telemetry import TelemetryManager
 from pydantic import BaseModel
 from pspf.utils.logging import get_logger
+from pspf.state.store import StateStore
+from pspf.processing.windows import Window
 
 logger = get_logger("Stream")
 
@@ -21,12 +23,14 @@ class Stream(Generic[T]):
     Attributes:
         backend (StreamingBackend): The storage backend for stream operations.
         schema (Optional[Type[T]]): Pydantic model for data validation.
+        state_store (Optional[StateStore]): Optional store for stateful aggregations.
         processor (BatchProcessor): Internal processor for batch handling.
         telemetry (TelemetryManager): Observability manager.
     """
     def __init__(self, 
                  backend: StreamingBackend,
-                 schema: Optional[Type[T]] = None):
+                 schema: Optional[Type[T]] = None,
+                 state_store: Optional[StateStore] = None):
         """
         Initialize the Stream facade.
 
@@ -34,9 +38,11 @@ class Stream(Generic[T]):
             backend (ValkeyStreamBackend): Configured backend instance.
             schema (Optional[Type[T]]): Pydantic model class for validation. 
                                         If None, uses dynamic SchemaRegistry.
+            state_store (Optional[StateStore]): Key-Value store for persistent state.
         """
         self.backend = backend
         self.schema = schema
+        self.state_store = state_store
         self.processor = BatchProcessor(backend)
         self.telemetry = TelemetryManager()
         
@@ -71,6 +77,10 @@ class Stream(Generic[T]):
         # We will ensure the group exists here.
         await self.backend.connect() # Idempotent-ish check inside
         await self.backend.ensure_group_exists()
+        
+        if self.state_store:
+            await self.state_store.start()
+            
         return self
 
     async def __aexit__(self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
@@ -81,6 +91,10 @@ class Stream(Generic[T]):
         """
         if self.processor:
             await self.processor.shutdown()
+            
+        if self.state_store:
+            await self.state_store.stop()
+            
         # We close the connection here as we "took ownership" in aenter
         await self.backend.close()
 
@@ -157,3 +171,94 @@ class Stream(Generic[T]):
 
         logger.info(f"Starting stream processor for {self.backend.stream_key}...")
         await self.processor.run_loop(typed_handler, batch_size=batch_size)
+
+    async def aggregate(self, 
+                        window: Window, 
+                        handler: Callable[[T, Any], Awaitable[Any]],
+                        batch_size: int = 10) -> None:
+        """
+        Start the infinite processing loop with stateful windowed aggregation.
+
+        Args:
+            window (Window): The windowing strategy to apply.
+            handler (Callable[[T, Any], Awaitable[Any]]): Async function taking (event, current_state) 
+                                                          and returning the new state.
+            batch_size (int): Number of messages to fetch in each batch. Default is 10.
+            
+        Raises:
+            RuntimeError: If no StateStore is attached to the Stream.
+        """
+        if not self.state_store:
+            raise RuntimeError("A StateStore must be provided to Stream.__init__ to use aggregate()")
+
+        async def aggregation_handler(msg_id: str, raw_data: Dict[str, Any]) -> None:
+            # 1. Deserialize / Validate (similar to run_loop)
+            if self.schema:
+                try:
+                    event = self.schema.model_validate(raw_data)
+                except Exception as e:
+                    logger.error(f"Schema validation failed for msg {msg_id}: {e}")
+                    raise e
+            else:
+                try:
+                    from typing import cast
+                    event = cast(T, SchemaRegistry.validate(raw_data))
+                except Exception as e:
+                    logger.error(f"Dynamic validation failed for msg {msg_id}: {e}")
+                    raise e
+                    
+            if isinstance(event, BaseEvent):
+                event.offset = msg_id
+
+            # 2. Extract Timestamp
+            # Prioritize event timestamp if available, else fallback to current time
+            # For robustness, we should use the actual event time
+            ts = getattr(event, "timestamp", None)
+            if ts is None:
+                # If no timestamp field, we inject one or fail?
+                # Fallback to current time
+                import time
+                ts_val = time.time()
+            else:
+                from datetime import datetime
+                if isinstance(ts, datetime):
+                    ts_val = ts.timestamp()
+                elif isinstance(ts, (int, float)):
+                    ts_val = float(ts)
+                else:
+                    import time
+                    ts_val = time.time()
+
+            # 3. Assign Windows
+            windows = window.assign_windows(ts_val)
+            
+            # 4. Process Each Window Location
+            # Key extraction: prefer 'key' attribute, else default
+            event_key = getattr(event, "key", "default_key")
+            
+            for start, end in windows:
+                # Construct state key e.g., "my_stream:default_key:1678000:1679000"
+                # Using stream_key to prevent cross-stream pollution if using same DB
+                state_key = f"{self.backend.stream_key}:{event_key}:{start}:{end}"
+                
+                # Fetch current state
+                current_state = await self.state_store.get(state_key)
+                
+                # Apply aggregation
+                new_state = await handler(event, current_state) # type: ignore
+                
+                # Save state
+                await self.state_store.put(state_key, new_state)
+            
+            # Atomically checkpoint offset for exactly-once-ish semantics
+            # if the state store supports transactional combined checkpointing.
+            # ( SQLiteStateStore does this )
+            group_name = getattr(self.backend, "group_name", "default_group")
+            await self.state_store.checkpoint(
+                stream_id=self.backend.stream_key,
+                group_id=group_name,
+                offset=msg_id
+            )
+
+        logger.info(f"Starting windowed aggregation processor for {self.backend.stream_key}...")
+        await self.processor.run_loop(aggregation_handler, batch_size=batch_size)

@@ -2,7 +2,7 @@ import asyncio
 import signal
 import time
 from typing import Callable, Awaitable, Dict, Any, List, Optional
-from pspf.utils.logging import get_logger
+from pspf.utils.logging import get_logger, bind_context, reset_context
 from pspf.connectors.base import StreamingBackend
 from pspf.telemetry import TelemetryManager
 from opentelemetry import trace
@@ -262,6 +262,12 @@ class BatchProcessor:
             context=ctx,
             attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
         ) as span:
+            # Bind structured logging context
+            log_token = bind_context(
+                stream=stream_name,
+                group=self.backend.group_name,
+                msg_id=msg_id
+            )
             try:
                 # Inspect handler signature to see if it wants context
                 sig = inspect.signature(handler)
@@ -289,6 +295,8 @@ class BatchProcessor:
                 
                 await self._handle_processing_error(msg_id, data, e)
                 return False
+            finally:
+                reset_context(log_token)
 
     async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception) -> None:
         """

@@ -94,6 +94,31 @@ def _send_control(base_url: str, action: str) -> None:
     except httpx.RequestError as e:
         typer.echo(f"❌ Connection error: {e}")
 
+@app.command("cluster-status")
+def cluster_status(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
+    """
+    Shows detailed cluster topology and partition assignments.
+    """
+    try:
+        r = httpx.get(f"{url}/cluster/status")
+        if r.status_code == 200:
+            data = r.json()
+            if not data.get("ha_enabled"):
+                typer.echo("ℹ️  HA/Clustering is not enabled on this worker.")
+                return
+                
+            typer.echo(f"🔵 Node ID: {data.get('node_id')}")
+            typer.echo(f"   Held Partitions: {data.get('held_partitions', [])}")
+            
+            nodes = data.get("nodes", [])
+            typer.echo(f"   Other Cluster Nodes ({len(nodes)}):")
+            for n in nodes:
+                typer.echo(f"     - {n.get('id')} at {n.get('host')}:{n.get('port')}")
+        else:
+            typer.echo(f"⚠️  Worker returned {r.status_code}: {r.text}")
+    except httpx.RequestError as e:
+        typer.echo(f"❌ Failed to connect to {url}: {e}")
+
 @app.command()
 def groups(stream: str = typer.Argument(..., help="Stream name to query")) -> None:
     """Lists consumer groups for a given stream."""
