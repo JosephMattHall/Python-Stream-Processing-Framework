@@ -4,8 +4,9 @@ import logging
 from typing import List, Tuple, Dict, Any, Optional
 
 try:
-    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-    import aiokafka.errors as kafka_errors
+    # Type stubs might be missing for aiokafka so we ignore import errors in mypy
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition # type: ignore
+    import aiokafka.errors as kafka_errors # type: ignore
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
@@ -20,7 +21,7 @@ class KafkaStreamBackend(StreamingBackend):
     Kafka (or Redpanda) implementation of StreamingBackend.
     Requires `aiokafka` package.
     """
-    def __init__(self, bootstrap_servers: str, topic: str, group_id: str, client_id: str):
+    def __init__(self, bootstrap_servers: str, topic: str, group_id: str, client_id: str) -> None:
         if not KAFKA_AVAILABLE:
             raise ImportError("aiokafka is required for KafkaStreamBackend. Install it with `pip install aiokafka`.")
             
@@ -41,7 +42,7 @@ class KafkaStreamBackend(StreamingBackend):
     def group_name(self) -> str:
         return self.group_id
 
-    async def connect(self):
+    async def connect(self) -> None:
         try:
             self.producer = AIOKafkaProducer(
                 bootstrap_servers=self.bootstrap_servers,
@@ -67,7 +68,7 @@ class KafkaStreamBackend(StreamingBackend):
             logger.error(f"Failed to connect to Kafka: {e}")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         if self.producer:
             await self.producer.stop()
         if self.consumer:
@@ -75,7 +76,7 @@ class KafkaStreamBackend(StreamingBackend):
         self._connected = False
         logger.info("Closed Kafka connection")
 
-    async def ping(self):
+    async def ping(self) -> bool:
         if not self._connected:
             raise ConnectionError("Not connected")
         # Lightweight check? Maybe metadata request?
@@ -84,7 +85,7 @@ class KafkaStreamBackend(StreamingBackend):
             await self.consumer.partitions_for_topic(self.topic)
         return True
 
-    async def ensure_group_exists(self, start_id: str = "0"):
+    async def ensure_group_exists(self, start_id: str = "0") -> None:
         # Kafka handles group creation automatically on join
         pass
 
@@ -132,7 +133,7 @@ class KafkaStreamBackend(StreamingBackend):
             logger.error(f"Error reading batch from Kafka: {e}")
             raise
 
-    async def ack_batch(self, message_ids: List[str]):
+    async def ack_batch(self, message_ids: List[str]) -> None:
         if not self.consumer:
             raise ConnectionError("Consumer not connected")
             
@@ -143,7 +144,7 @@ class KafkaStreamBackend(StreamingBackend):
         # This is tricky without tracking TopicPartition objects.
         # Limitation: We need to parse msg_id to get partition/offset back.
         
-        offsets_to_commit = {}
+        offsets_to_commit: Dict[Any, Any] = {}
         
         for msg_id in message_ids:
             try:
@@ -151,9 +152,8 @@ class KafkaStreamBackend(StreamingBackend):
                 partition = int(part_str)
                 offset = int(off_str)
                 
-                tp = asyncio.Task.current_task() # No, tracking TP object is needed
-                # We need to reconstruct TopicPartiton
-                from aiokafka import TopicPartition
+                # We reconstruct TopicPartition
+                from aiokafka import TopicPartition # type: ignore
                 tp = TopicPartition(self.topic, partition)
                 
                 # We want to commit offset + 1
@@ -168,7 +168,7 @@ class KafkaStreamBackend(StreamingBackend):
                 logger.warning(f"Invalid message ID format for Kafka ACK: {msg_id}")
         
         if offsets_to_commit:
-            await self.consumer.commit(offsets_to_commit)
+            await self.consumer.commit(offsets_to_commit) # type: ignore
 
     async def claim_stuck_messages(self, min_idle_time_ms: int = 60000, count: int = 10) -> List[Tuple[str, Dict[str, Any]]]:
         # Kafka doesn't have PEL claiming mechanim like Redis Streams.
@@ -185,7 +185,7 @@ class KafkaStreamBackend(StreamingBackend):
         # Or, we can use a separate Redis for state?
         return 1
 
-    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str):
+    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str) -> None:
          # Produce to DLQ topic
          dlq_topic = f"{self.topic}-dlq"
          if self.producer:

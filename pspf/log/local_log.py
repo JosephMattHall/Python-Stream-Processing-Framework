@@ -1,9 +1,9 @@
 import asyncio
-import msgpack
+import msgpack # type: ignore
 import struct
 import os
 import zlib
-import aiofiles
+import aiofiles # type: ignore
 from datetime import datetime
 from typing import AsyncIterator, List, Any, Dict, Optional, Tuple
 from pathlib import Path

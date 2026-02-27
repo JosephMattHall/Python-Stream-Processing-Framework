@@ -12,7 +12,7 @@ class MemoryBackend(StreamingBackend):
     In-Memory backend for testing/local verification.
     Not persistent across restarts.
     """
-    def __init__(self, stream_key: str = "default-stream", group_name: str = "default-group"):
+    def __init__(self, stream_key: str = "default-stream", group_name: str = "default-group") -> None:
         self._stream_key = stream_key
         self._group_name = group_name
         self._last_ts = 0
@@ -47,20 +47,20 @@ class MemoryBackend(StreamingBackend):
     def group_name(self) -> str:
         return self._group_name
 
-    async def connect(self):
+    async def connect(self) -> None:
         self._connected = True
         logger.info("Connected to MemoryBackend")
 
-    async def close(self):
+    async def close(self) -> None:
         self._connected = False
         logger.info("Closed MemoryBackend")
 
-    async def ping(self):
+    async def ping(self) -> bool:
         if not self._connected:
             raise ConnectionError("Not connected")
         return True
 
-    async def ensure_group_exists(self, start_id: str = "0"):
+    async def ensure_group_exists(self, start_id: str = "0") -> None:
         # For memory, we just init the offset structure if missing
         pass
 
@@ -116,7 +116,7 @@ class MemoryBackend(StreamingBackend):
             # Allow clean tuple return
             return [(m["_id"], {k:v for k,v in m.items() if k != "_id"}) for m in batch]
 
-    async def ack_batch(self, message_ids: List[str]):
+    async def ack_batch(self, message_ids: List[str]) -> None:
         # Remove from PEL, potentially
         pass
 
@@ -127,7 +127,7 @@ class MemoryBackend(StreamingBackend):
         self._retries[message_id] = self._retries.get(message_id, 0) + 1
         return self._retries[message_id]
 
-    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str):
+    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str) -> None:
         if self.stream_key not in self.dlq:
             self.dlq[self.stream_key] = []
         self.dlq[self.stream_key].append({"id": message_id, "data": data, "error": error})

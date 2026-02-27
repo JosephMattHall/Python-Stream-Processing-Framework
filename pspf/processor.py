@@ -48,12 +48,12 @@ class BatchProcessor:
         self.tracer = self.telemetry.get_tracer()
         self._paused = False
 
-    def pause(self):
+    def pause(self) -> None:
         """Pause message consumption."""
         self._paused = True
         logger.info("Processor paused.")
 
-    def resume(self):
+    def resume(self) -> None:
         """Resume message consumption."""
         self._paused = False
         logger.info("Processor resumed.")
@@ -203,7 +203,7 @@ class BatchProcessor:
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
 
-    async def _start_admin_server(self):
+    async def _start_admin_server(self) -> None:
         """
         Starts the Admin API server.
         """
@@ -215,21 +215,21 @@ class BatchProcessor:
             config = Config(
                 app=app, 
                 host="0.0.0.0", 
-                port=settings.ADMIN_PORT, 
+                port=settings.telemetry.ADMIN_PORT, 
                 log_config=None,
                 log_level="warning" 
             )
             server = Server(config)
             
             # Disable signal handlers as we manage them
-            server.install_signal_handlers = lambda: None
+            server.install_signal_handlers = lambda: None # type: ignore
             
-            logger.info(f"Starting Admin API on port {settings.ADMIN_PORT}")
+            logger.info(f"Starting Admin API on port {settings.telemetry.ADMIN_PORT}")
             await server.serve()
         except Exception as e:
             logger.error(f"Failed to start Admin API: {e}")
 
-    async def _monitor_metrics(self, interval: float = 10.0):
+    async def _monitor_metrics(self, interval: float = 10.0) -> None:
         """
         Background task to update lag and other metrics.
         """

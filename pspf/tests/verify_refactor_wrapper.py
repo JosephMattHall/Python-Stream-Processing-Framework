@@ -4,7 +4,7 @@ import os
 # Ensure project root is in path
 sys.path.insert(0, os.getcwd())
 
-from examples.verify_refactor import main
+from examples.verify_refactor import main # type: ignore
 import asyncio
 
 if __name__ == "__main__":

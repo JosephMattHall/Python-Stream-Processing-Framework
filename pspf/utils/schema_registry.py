@@ -6,10 +6,10 @@ class SchemaRegistry:
     In production, this would communicate with a central registry service
     to ensure backward/forward compatibility.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         self.schemas: Dict[str, Any] = {}
 
-    def register(self, event_type: str, schema_def: Any):
+    def register(self, event_type: str, schema_def: Any) -> None:
         self.schemas[event_type] = schema_def
 
     def get_schema(self, event_type: str) -> Optional[Any]:

@@ -7,7 +7,7 @@ class MemoryOffsetStore(OffsetStore):
     In-memory implementation of OffsetStore.
     Useful for testing and single-instance deployments.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         # Mapping: consumer_id -> partition -> offset
         self._offsets: Dict[str, Dict[int, int]] = {}
         self._lock = asyncio.Lock()

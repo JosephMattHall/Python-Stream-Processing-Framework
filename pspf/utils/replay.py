@@ -9,11 +9,11 @@ from pspf.utils.logging import setup_logging
 setup_logging()
 logger = logging.getLogger("pspf.replay")
 
-async def replay_dead_letters(source_dlq: str, target_stream: str, count: int = 100, delete: bool = False):
+async def replay_dead_letters(source_dlq: str, target_stream: str, count: int = 100, delete: bool = False) -> None:
     """
     Reads messages from DLQ and re-injects them into the target stream.
     """
-    connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+    connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
     await connector.connect()
     client = connector.get_client()
 
@@ -50,7 +50,7 @@ async def replay_dead_letters(source_dlq: str, target_stream: str, count: int = 
     finally:
         await connector.close()
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser(description="Replay Dead Letter Queue messages.")
     parser.add_argument("dlq_stream", help="Name of the DLQ stream (e.g. events-dlq)")
     parser.add_argument("target_stream", help="Name of the target stream (e.g. events)")

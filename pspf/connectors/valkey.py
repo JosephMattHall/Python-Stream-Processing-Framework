@@ -8,25 +8,22 @@ from valkey.exceptions import ResponseError
 from pspf.utils.logging import get_logger
 
 logger = get_logger("ValkeyBackend")
-
 class ValkeyConnector:
     """
     Manages the connection pool to a Valkey (or Redis) server.
-
-    Attributes:
-        host (str): Database host.
-        port (int): Database port.
-        password (Optional[str]): Database password.
-        db (int): Database index.
     """
-    def __init__(self, host: str = 'localhost', port: int = 6379, password: Optional[str] = None, db: int = 0):
-        self.host = host
-        self.port = port
-        self.password = password
-        self.db = db
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, password: Optional[str] = None, db: Optional[int] = None, valkey_settings: Optional[Any] = None):
+        # Fallback to global settings if nothing provided
+        from pspf.settings import settings as global_settings
+        self._s = valkey_settings or global_settings.valkey
+        
+        self.host = host or self._s.HOST
+        self.port = port or self._s.PORT
+        self.password = password if password is not None else self._s.PASSWORD
+        self.db = db if db is not None else self._s.DB
         self._pool: Optional[valkey.Valkey] = None
 
-    async def connect(self):
+    async def connect(self) -> None:
         """
         Establish a connection pool to the database.
         
@@ -34,24 +31,23 @@ class ValkeyConnector:
              ConnectionError: If connectivity fails.
         """
         if not self._pool:
-            from pspf.settings import settings
             self._pool = valkey.Valkey(
                 host=self.host,
                 port=self.port,
                 password=self.password,
                 db=self.db,
-                ssl=settings.VALKEY_SSL,
-                ssl_ca_certs=settings.VALKEY_SSL_CA_CERTS,
-                ssl_cert_reqs=settings.VALKEY_SSL_CERT_REQS,
+                ssl=self._s.SSL,
+                ssl_ca_certs=self._s.SSL_CA_CERTS,
+                ssl_cert_reqs=self._s.SSL_CERT_REQS,
                 decode_responses=True,
-                socket_timeout=settings.VALKEY_SOCKET_TIMEOUT,
-                socket_connect_timeout=settings.VALKEY_SOCKET_TIMEOUT
+                socket_timeout=self._s.SOCKET_TIMEOUT,
+                socket_connect_timeout=self._s.SOCKET_TIMEOUT
             )
             # Fail fast if connection is bad
             await self._pool.ping()
-            logger.info(f"Connected to Valkey at {self.host}:{self.port} (SSL={settings.VALKEY_SSL})")
+            logger.info(f"Connected to Valkey at {self.host}:{self.port} (SSL={self._s.SSL})")
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Close the connection pool.
         """
@@ -74,11 +70,11 @@ class ValkeyConnector:
             raise RuntimeError("ValkeyConnector is not connected. Call connect() first.")
         return self._pool
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ValkeyConnector":
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
 
@@ -110,17 +106,18 @@ class ValkeyStreamBackend(StreamingBackend):
     def group_name(self) -> str:
         return self._group_name
 
-    async def connect(self):
+    async def connect(self) -> None:
         await self.connector.connect()
 
-    async def close(self):
+    async def close(self) -> None:
         await self.connector.close()
 
-    async def ping(self):
+    async def ping(self) -> bool:
         client = self.connector.get_client()
         await client.ping()
+        return True
 
-    async def ensure_group_exists(self, start_id: str = "0"):
+    async def ensure_group_exists(self, start_id: str = "0") -> None:
         """
         Idempotent creation of the consumer group.
         
@@ -194,7 +191,7 @@ class ValkeyStreamBackend(StreamingBackend):
         Gets the current retry count for a message ID.
         """
         client = self.connector.get_client()
-        count = await client.hget(self.retry_tracker_key, message_id)
+        count: Any = await client.hget(self.retry_tracker_key, message_id) # type: ignore
         if count:
             return int(count)
         return 0
@@ -210,9 +207,10 @@ class ValkeyStreamBackend(StreamingBackend):
              int: The new retry count.
         """
         client = self.connector.get_client()
-        return await client.hincrby(self.retry_tracker_key, message_id, 1)
+        res: Any = await client.hincrby(self.retry_tracker_key, message_id, 1) # type: ignore
+        return int(res)
 
-    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str):
+    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str) -> None:
         """
         Moves a message to the DLQ stream and ACKs it in the main stream.
         
@@ -238,9 +236,9 @@ class ValkeyStreamBackend(StreamingBackend):
         await client.xack(self.stream_key, self.group_name, message_id)
         
         # Clean up retry tracker
-        await client.hdel(self.retry_tracker_key, message_id)
+        await client.hdel(self.retry_tracker_key, message_id) # type: ignore
 
-    async def ack_batch(self, message_ids: List[str]):
+    async def ack_batch(self, message_ids: List[str]) -> None:
         """
         Acknowledges a batch of message IDs and cleans up retry counters.
         
@@ -282,8 +280,8 @@ class ValkeyStreamBackend(StreamingBackend):
                 safe_data[k] = v
 
         client = self.connector.get_client()
-        msg_id = await client.xadd(self.stream_key, safe_data, maxlen=max_len)
-        return msg_id
+        msg_id: Any = await client.xadd(self.stream_key, safe_data, maxlen=max_len)
+        return str(msg_id)
 
     async def claim_stuck_messages(self, min_idle_time_ms: int = 60000, count: int = 10) -> List[Tuple[str, Dict[str, Any]]]:
         """
@@ -304,7 +302,7 @@ class ValkeyStreamBackend(StreamingBackend):
             # Returns: (next_start_id, messages)
             # messages is a list of (msg_id, data)
             current_id = "0-0"
-            all_messages = []
+            all_messages: List[Tuple[str, Dict[str, Any]]] = []
             
             # We might need to loop if we really want to grab 'count' messages, 
             # but XAUTOCLAIM returns a batch usually. We'll just take one batch for simplicity to avoid implementation complexity.

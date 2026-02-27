@@ -2,7 +2,7 @@ import asyncio
 import uuid
 import time
 import json
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pspf.utils.logging import get_logger
 import valkey.asyncio as valkey
 
@@ -16,7 +16,7 @@ class ClusterCoordinator:
     - pspf:nodes:<node_id> -> Metadata (TTL 10s)
     - pspf:partition:<key>:leader -> Node ID (TTL 10s)
     """
-    def __init__(self, valkey_url: str, host: str, port: int, node_id: Optional[str] = None):
+    def __init__(self, valkey_url: str, host: str, port: int, node_id: Optional[str] = None) -> None:
         self.valkey_url = valkey_url
         self.host = host
         self.port = port
@@ -25,7 +25,7 @@ class ClusterCoordinator:
         self._client: Optional[valkey.Redis] = None
         self._held_partitions: List[str] = []
         
-    async def start(self):
+    async def start(self) -> None:
         self._client = valkey.from_url(self.valkey_url, decode_responses=True)
         self._running = True
         logger.info(f"Starting Coordinator for Node {self.node_id} ({self.host}:{self.port})")
@@ -36,7 +36,7 @@ class ClusterCoordinator:
         # Start Heartbeat Loop
         asyncio.create_task(self._heartbeat_loop())
         
-    async def stop(self):
+    async def stop(self) -> None:
         self._running = False
         if self._client:
             # Release leaderships? Or let them expire.
@@ -45,7 +45,7 @@ class ClusterCoordinator:
                 await self._client.delete(f"pspf:partition:{p_key}:leader")
             await self._client.close()
 
-    async def _register(self):
+    async def _register(self) -> None:
         if not self._client: return
         data = {
             "id": self.node_id,
@@ -56,7 +56,8 @@ class ClusterCoordinator:
         # Set with TTL 10s
         await self._client.set(f"pspf:nodes:{self.node_id}", json.dumps(data), ex=10)
 
-    async def _heartbeat_loop(self):
+    async def _heartbeat_loop(self) -> None:
+        if not self._client: return
         while self._running:
             try:
                 # 1. Refresh Node TTL
@@ -73,7 +74,7 @@ class ClusterCoordinator:
                         return 0
                     end
                     """
-                    result = await self._client.eval(script, 1, key, self.node_id)
+                    result = await self._client.eval(script, 1, key, self.node_id) # type: ignore
                     if not result:
                         logger.warning(f"Lost leadership for {p_key}")
                         self._held_partitions.remove(p_key)
@@ -110,7 +111,7 @@ class ClusterCoordinator:
              
         return False
         
-    async def get_leader_node(self, partition_key: str) -> Optional[Dict]:
+    async def get_leader_node(self, partition_key: str) -> Optional[Dict[str, Any]]:
         """
         Resolves the leader node metadata for a partition.
         Returns None if no leader.
@@ -121,12 +122,12 @@ class ClusterCoordinator:
         if not leader_id:
             return None
             
-        node_json = await self._client.get(f"pspf:nodes:{leader_id}")
+        node_json = await self._client.get(f"pspf:nodes:{leader_id}") # type: ignore
         if node_json:
-            return json.loads(node_json)
+            return json.loads(node_json) # type: ignore
         return None
 
-    async def get_other_nodes(self) -> List[Dict]:
+    async def get_other_nodes(self) -> List[Dict[str, Any]]:
         """
         Returns a list of metadata for all OTHER registered nodes (excluding self).
         """
@@ -151,7 +152,7 @@ class ClusterCoordinator:
                  
                  data = await self._client.get(k)
                  if data:
-                     nodes.append(json.loads(data))
+                     nodes.append(json.loads(data)) # type: ignore
             
             if cursor == 0:
                 break

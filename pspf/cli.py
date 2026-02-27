@@ -21,7 +21,7 @@ def inspect(
     partition: int = typer.Option(0, help="Partition to inspect"),
     limit: int = typer.Option(10, help="Number of records to show"),
     tail: bool = typer.Option(False, help="Show last N records instead of first N")
-):
+) -> None:
     """
     Inspects the local log files directly.
     """
@@ -29,7 +29,7 @@ def inspect(
         typer.echo(f"Error: Directory {data_dir} does not exist.")
         raise typer.Exit(code=1)
 
-    async def _inspect():
+    async def _inspect() -> None:
         log = LocalLog(str(data_dir), num_partitions=1) # Num partitions doesn't matter for reading specific p
         
         # Get High Watermark
@@ -55,7 +55,7 @@ def inspect(
     asyncio.run(_inspect())
 
 @app.command()
-def status(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")):
+def status(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
     """
     Checks the status of a PSPF worker.
     """
@@ -70,20 +70,20 @@ def status(url: str = typer.Option("http://localhost:8001", help="URL of the Adm
         typer.echo(f"❌ Failed to connect to {url}: {e}")
 
 @app.command()
-def pause(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")):
+def pause(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
     """
     Pauses the worker's message consumption.
     """
     _send_control(url, "pause")
 
 @app.command()
-def resume(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")):
+def resume(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
     """
     Resumes the worker's message consumption.
     """
     _send_control(url, "resume")
 
-def _send_control(base_url: str, action: str):
+def _send_control(base_url: str, action: str) -> None:
     url = f"{base_url}/control/{action}"
     try:
         r = httpx.post(url)
@@ -95,10 +95,10 @@ def _send_control(base_url: str, action: str):
         typer.echo(f"❌ Connection error: {e}")
 
 @app.command()
-def groups(stream: str = typer.Argument(..., help="Stream name to query")):
+def groups(stream: str = typer.Argument(..., help="Stream name to query")) -> None:
     """Lists consumer groups for a given stream."""
-    async def _groups():
-        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+    async def _groups() -> None:
+        connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
         async with connector:
             client = connector.get_client()
             try:
@@ -120,10 +120,10 @@ def reset(
     stream: str = typer.Argument(..., help="Stream name"),
     group: str = typer.Argument(..., help="Consumer group name"),
     offset: str = typer.Argument("0", help="Offset to reset to (0, $, or specific ID)")
-):
+) -> None:
     """Resets the offset for a consumer group."""
-    async def _reset():
-        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+    async def _reset() -> None:
+        connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
         async with connector:
             client = connector.get_client()
             try:
@@ -139,12 +139,12 @@ def replay(
     stream: str = typer.Argument(..., help="Source stream (e.g. 'orders')"),
     group: str = typer.Argument(..., help="Consumer group that failed"),
     limit: int = typer.Option(100, help="Max messages to replay")
-):
+) -> None:
     """Replays messages from DLQ back to the main stream."""
     dlq_stream = f"{stream}-dlq"
     
-    async def _replay():
-        connector = ValkeyConnector(host=settings.VALKEY_HOST, port=settings.VALKEY_PORT)
+    async def _replay() -> None:
+        connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
         async with connector:
             client = connector.get_client()
             try:

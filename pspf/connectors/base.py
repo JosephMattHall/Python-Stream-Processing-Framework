@@ -47,22 +47,24 @@ class StreamingBackend(ABC):
         pass
 
     @abstractmethod
-    async def connect(self):
+    @abstractmethod
+    async def connect(self) -> None:
         """Establish connection to the backend."""
         pass
         
     @abstractmethod
-    async def close(self):
+    async def close(self) -> None:
         """Close connection to the backend."""
         pass
 
     @abstractmethod
-    async def ping(self):
+    @abstractmethod
+    async def ping(self) -> bool:
         """Check connection health."""
         pass
 
     @abstractmethod
-    async def ensure_group_exists(self, start_id: str = "0"):
+    async def ensure_group_exists(self, start_id: str = "0") -> None:
         """Ensure the consumer group exists."""
         pass
 
@@ -77,7 +79,7 @@ class StreamingBackend(ABC):
         pass
 
     @abstractmethod
-    async def ack_batch(self, message_ids: List[str]):
+    async def ack_batch(self, message_ids: List[str]) -> None:
         """Acknowledge a batch of messages as processed."""
         pass
 
@@ -104,7 +106,7 @@ class StreamingBackend(ABC):
         pass
         
     @abstractmethod
-    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str):
+    async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str) -> None:
         """Move a failed message to the Dead Letter Queue."""
         pass
 

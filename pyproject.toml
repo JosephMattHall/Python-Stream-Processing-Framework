@@ -8,7 +8,7 @@ exclude = ["examples*", "tests*", "protos*"]
 
 [project]
 name = "pspf"
-version = "0.1.0"
+version = "0.1.0b1"
 description = "Python Stream Processing Framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,7 +17,7 @@ authors = [
   {name = "Joseph Hall", email = "joseph@josephmatthewhall.com"},
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
@@ -54,8 +54,9 @@ dev = [
   "black",
   "isort",
   "ruff",
+  "aiokafka>=0.8.0",
+  "pytest-mock",
 ]
-# Removed legacy 'hardened' extras (aiokafka, gmqtt)
 rocksdb = [
     "rocksdb-python>=0.1.0"
 ]
@@ -67,9 +68,21 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
 [tool.black]
 line-length = 88
 target-version = ['py311']
 
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "integration: marks tests as integration tests that require live infrastructure",
+    "valkey: tests that specifically require Valkey/Redis",
+    "kafka: tests that require Kafka",
+]

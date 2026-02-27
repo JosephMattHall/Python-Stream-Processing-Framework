@@ -5,8 +5,8 @@ from pspf.state.backends.rocksdb_store import RocksDBStateStore
 
 # Check if rocksdb is installed
 try:
-    import rocksdb
-    HAS_ROCKSDB = True
+    import rocksdb # type: ignore
+    HAS_ROCKSDB = hasattr(rocksdb, "DB")
 except ImportError:
     HAS_ROCKSDB = False
 

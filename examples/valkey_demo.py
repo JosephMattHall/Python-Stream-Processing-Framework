@@ -30,9 +30,9 @@ async def main() -> None:
     
     # Initialize the Backend using Settings
     connector = ValkeyConnector(
-        host=settings.VALKEY_HOST, 
-        port=settings.VALKEY_PORT,
-        password=settings.VALKEY_PASSWORD
+        host=settings.valkey.HOST, 
+        port=settings.valkey.PORT,
+        password=settings.valkey.PASSWORD
     )
     # Create Backend
     backend = ValkeyStreamBackend(connector, stream_key, group_name, consumer_name)

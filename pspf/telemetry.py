@@ -17,7 +17,7 @@ class MetricsCollector:
     """
     Prometheus Metrics definition.
     """
-    def __init__(self):
+    def __init__(self) -> None:
         # Counters
         self.messages_processed = Counter(
             'stream_messages_processed_total', 
@@ -55,21 +55,22 @@ class TelemetryManager:
     Centralized manager for Observability.
     Singleton pattern usage recommended.
     """
-    _instance = None
+    _instance: Optional["TelemetryManager"] = None
+    _initialized: bool = False
 
-    def __new__(cls):
+    def __new__(cls) -> "TelemetryManager":
         if cls._instance is None:
             cls._instance = super(TelemetryManager, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
             
-        self.enabled = settings.OTEL_ENABLED
+        self.enabled = settings.telemetry.ENABLED
         self.metrics = MetricsCollector()
-        self.tracer = None
+        self.tracer: Optional[Any] = None
         
         if self.enabled:
             self._setup_otel()
@@ -79,14 +80,14 @@ class TelemetryManager:
 
         # Start Prometheus Endpoint
         try:
-            start_http_server(settings.PROMETHEUS_PORT)
-            logger.info(f"Prometheus metrics exposed on port {settings.PROMETHEUS_PORT}")
+            start_http_server(settings.telemetry.PROMETHEUS_PORT)
+            logger.info(f"Prometheus metrics exposed on port {settings.telemetry.PROMETHEUS_PORT}")
         except Exception as e:
             logger.warning(f"Could not start Prometheus server (maybe already running?): {e}")
 
         self._initialized = True
 
-    def _setup_otel(self):
+    def _setup_otel(self) -> None:
         """
         Configure OTel Provider.
         For production, you'd likely Config OTLP Exporter here.
@@ -99,18 +100,18 @@ class TelemetryManager:
         trace.set_tracer_provider(provider)
         self.tracer = trace.get_tracer("pspf", "0.1.0")
 
-    def get_tracer(self):
+    def get_tracer(self) -> Any:
         if not self.enabled:
             return trace.NoOpTracerProvider().get_tracer("noop")
         return self.tracer
 
-    def inject_context(self, carrier: Dict[str, Any]):
+    def inject_context(self, carrier: Dict[str, Any]) -> None:
         """Injects current Trace Context into a dictionary."""
         if not self.enabled:
             return
         inject(carrier)
 
-    def extract_context(self, carrier: Dict[str, Any]):
+    def extract_context(self, carrier: Dict[str, Any]) -> Any:
         """Returns a Context object extracted from the carrier."""
         if not self.enabled:
             return None

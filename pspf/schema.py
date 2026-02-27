@@ -32,7 +32,7 @@ class SchemaRegistry:
     _registry: Dict[str, Type[BaseModel]] = {}
 
     @classmethod
-    def register(cls, event_type: str, model: Type[BaseModel]):
+    def register(cls, event_type: str, model: Type[BaseModel]) -> None:
         cls._registry[event_type] = model
 
     @classmethod

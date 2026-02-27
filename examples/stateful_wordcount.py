@@ -3,7 +3,7 @@ import random
 import os
 from pspf.processor import BatchProcessor
 from pspf.connectors.memory import MemoryBackend
-from pspf.state.backends.sqlite import SQLiteStateStore
+from pspf.state.backends.sqlite_store import SQLiteStateStore
 from pspf.context import Context
 from pspf.utils.logging import setup_logging, get_logger
 

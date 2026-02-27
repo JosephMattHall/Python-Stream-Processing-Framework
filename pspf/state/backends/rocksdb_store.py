@@ -21,9 +21,9 @@ class RocksDBStateStore(StateStore):
         self._executor = ThreadPoolExecutor(max_workers=1) # Sequential access for safety
         self._checkpoint_prefix = b"__pspf_offset__:"
 
-    async def start(self):
+    async def start(self) -> None:
         try:
-            import rocksdb
+            import rocksdb # type: ignore
         except ImportError:
             logger.error("RocksDB not installed. Please install 'rocksdb-python'.")
             raise RuntimeError("RocksDB is not installed on this system.")
@@ -34,7 +34,7 @@ class RocksDBStateStore(StateStore):
             
         loop = asyncio.get_running_loop()
         
-        def _open():
+        def _open() -> Any:
             opts = rocksdb.Options()
             opts.create_if_missing = True
             return rocksdb.DB(self.path, opts, read_only=self.read_only)
@@ -42,7 +42,7 @@ class RocksDBStateStore(StateStore):
         self._db = await loop.run_in_executor(self._executor, _open)
         logger.info(f"Opened RocksDB State Store at {self.path}")
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._db:
             self._db = None
             self._executor.shutdown()
@@ -62,18 +62,18 @@ class RocksDBStateStore(StateStore):
                 return default
         return default
 
-    async def put(self, key: str, value: Any):
+    async def put(self, key: str, value: Any) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
         data = pickle.dumps(value)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, lambda: self._db.put(key.encode(), data))
 
-    async def put_batch(self, entries: Dict[str, Any]):
+    async def put_batch(self, entries: Dict[str, Any]) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
         import rocksdb
-        def _batch():
+        def _batch() -> None:
             batch = rocksdb.WriteBatch()
             for k, v in entries.items():
                 batch.put(k.encode(), pickle.dumps(v))
@@ -82,15 +82,15 @@ class RocksDBStateStore(StateStore):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, _batch)
 
-    async def delete(self, key: str):
+    async def delete(self, key: str) -> None:
         if not self._db: raise RuntimeError("Store not started")
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, lambda: self._db.delete(key.encode()))
 
-    async def flush(self):
+    async def flush(self) -> None:
         pass
 
-    async def checkpoint(self, stream_id: str, group_id: str, offset: str):
+    async def checkpoint(self, stream_id: str, group_id: str, offset: str) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
         key = self._checkpoint_prefix + f"{stream_id}:{group_id}".encode()

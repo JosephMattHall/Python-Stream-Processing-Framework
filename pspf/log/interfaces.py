@@ -14,7 +14,7 @@ class Log(ABC):
         pass
 
     @abstractmethod
-    async def read(self, partition: int, offset: int) -> AsyncIterator[StreamRecord]:
+    def read(self, partition: int, offset: int) -> AsyncIterator[StreamRecord]:
         """
         Read records from a specific partition starting at the given offset.
         Yields records as they become available (or just the batch).

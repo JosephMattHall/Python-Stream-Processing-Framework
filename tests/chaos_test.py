@@ -10,6 +10,7 @@ from pspf.processor import BatchProcessor
 from pspf.state.backends.sqlite_store import SQLiteStateStore
 from pspf.context import Context
 from pspf.utils.logging import setup_logging, get_logger
+from typing import Dict, Any
 
 # Ensure we can import pspf
 sys.path.append(os.getcwd())
@@ -39,11 +40,12 @@ async def worker_process(node_id: str, duration: int):
         processor = BatchProcessor(backend, state_store=store, max_retries=5, min_idle_time_ms=2000)
         
         # Handler: Count total messages processed in state
-        async def handler(msg_id, data, ctx: Context):
+        async def handler(msg_id: str, data: Dict[str, Any], ctx: Context) -> None:
             # We track global count in Redis to verify later? 
             # Or just local state count.
             # Let's verify no data loss.
             # We will use state to count "processed"
+            assert ctx.state
             count = await ctx.state.get("processed_count", 0)
             await ctx.state.put("processed_count", count + 1)
             
@@ -53,7 +55,7 @@ async def worker_process(node_id: str, duration: int):
         # Run loop
         logger.info(f"Worker {node_id} running loop.")
         try:
-            await asyncio.wait_for(processor.run_loop(handler), timeout=duration)
+            await asyncio.wait_for(processor.run_loop(handler), timeout=duration) # type: ignore
         except asyncio.TimeoutError:
             logger.info(f"Worker {node_id} finished duration.")
         except asyncio.CancelledError:

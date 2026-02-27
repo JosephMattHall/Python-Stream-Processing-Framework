@@ -7,6 +7,7 @@ from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
 from pspf.processor import BatchProcessor
 from pspf.state.backends.sqlite_store import SQLiteStateStore
 from pspf.context import Context
+from typing import Dict, Any
 
 class TestEndToEnd(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -63,13 +64,14 @@ class TestEndToEnd(unittest.IsolatedAsyncioTestCase):
         # Counts sum of 'val' per 'key'
         processed_count = 0
         
-        async def handler(msg_id, data, ctx: Context):
+        async def handler(msg_id: str, data: Dict[str, Any], ctx: Context) -> None:
             nonlocal processed_count
             key = data.get("key")
             val = data.get("val")
+            assert ctx.state
             
-            curr = await ctx.state.get(key, 0)
-            await ctx.state.put(key, curr + val)
+            curr = await ctx.state.get(str(key), 0)
+            await ctx.state.put(str(key), curr + val)
             processed_count += 1
 
         # 3. Run Loop in background

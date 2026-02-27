@@ -9,8 +9,8 @@ from pspf.context import Context
 
 # Check for RocksDB
 try:
-    import rocksdb
-    HAS_ROCKSDB = True
+    import rocksdb # type: ignore
+    HAS_ROCKSDB = hasattr(rocksdb, "DB")
 except ImportError:
     HAS_ROCKSDB = False
 

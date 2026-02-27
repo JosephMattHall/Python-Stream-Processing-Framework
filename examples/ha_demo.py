@@ -87,7 +87,7 @@ async def run():
     async def seed_data():
         while True:
             await asyncio.sleep(1)
-            await backend.send({"event_type": "tick", "key": "p0", "val": datetime.now().isoformat()})
+            await backend.add_event({"event_type": "tick", "key": "p0", "val": datetime.now().isoformat()})
             
     asyncio.create_task(seed_data())
 

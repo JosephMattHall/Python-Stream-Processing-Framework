@@ -102,7 +102,7 @@ def test_telemetry_singleton():
 def test_telemetry_disabled_by_default():
     # Assuming .env doesn't set OTEL_ENABLED=true or defaults are False
     # If environment sets it, this might flap, but default in settings.py is False
-    with patch('pspf.settings.settings.OTEL_ENABLED', False), \
+    with patch('pspf.settings.settings.telemetry.ENABLED', False), \
          patch('pspf.telemetry.MetricsCollector') as MockCollector:
         # We need to reset the singleton to test init logic effectively
         TelemetryManager._instance = None

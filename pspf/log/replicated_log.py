@@ -1,6 +1,6 @@
 import httpx
 import asyncio
-from typing import Optional, List
+from typing import Optional, List, AsyncIterator, Dict, Any
 from pspf.log.interfaces import Log
 from pspf.log.local_log import LocalLog
 from pspf.models import StreamRecord
@@ -19,13 +19,13 @@ class ReplicatedLog(Log):
         self._http_client = httpx.AsyncClient(timeout=2.0)
         self._admin_port = admin_port
 
-    async def partitions(self) -> int:
+    def partitions(self) -> int:
         return self._local.partitions()
 
     async def get_high_watermark(self, partition: int) -> int:
         return await self._local.get_high_watermark(partition)
 
-    async def read(self, partition: int, offset: int):
+    async def read(self, partition: int, offset: int) -> AsyncIterator[StreamRecord]:
         async for r in self._local.read(partition, offset):
             yield r
 
@@ -60,7 +60,7 @@ class ReplicatedLog(Log):
         await asyncio.gather(*tasks, return_exceptions=True)
         # TODO: Handle failures? For now "Best Effort" synchronous replication
 
-    async def _replicate_to_node(self, node: dict, record: StreamRecord):
+    async def _replicate_to_node(self, node: Dict[str, Any], record: StreamRecord) -> None:
         url = f"http://{node['host']}:{node['port']}/internal/replicate" # Port? Admin port?
         # Coordinator stores registered port. If that's the Admin port, good. 
         # If it's the Prometheus port, bad.

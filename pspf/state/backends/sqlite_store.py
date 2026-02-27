@@ -13,12 +13,12 @@ class SQLiteStateStore(StateStore):
     Persistent state store using SQLite.
     Values are pickled before storage.
     """
-    def __init__(self, path: str, table_name: str = "kv_store"):
+    def __init__(self, path: str, table_name: str = "kv_store") -> None:
         self.path = path
         self.table_name = table_name
         self._db: Optional[aiosqlite.Connection] = None
 
-    async def start(self):
+    async def start(self) -> None:
         # Ensure directory exists
         dirname = os.path.dirname(self.path)
         if dirname and not os.path.exists(dirname):
@@ -36,7 +36,7 @@ class SQLiteStateStore(StateStore):
         await self._db.commit()
         logger.info(f"Opened SQLite State Store at {self.path}")
 
-    async def stop(self):
+    async def stop(self) -> None:
         if self._db:
             await self._db.close()
 
@@ -53,7 +53,7 @@ class SQLiteStateStore(StateStore):
                     return default
             return default
 
-    async def put(self, key: str, value: Any):
+    async def put(self, key: str, value: Any) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
         data = pickle.dumps(value)
@@ -64,7 +64,7 @@ class SQLiteStateStore(StateStore):
         # Auto-commit for single puts
         await self._db.commit()
 
-    async def put_batch(self, entries: Dict[str, Any]):
+    async def put_batch(self, entries: Dict[str, Any]) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
         # Prepare data
@@ -80,16 +80,16 @@ class SQLiteStateStore(StateStore):
         )
         await self._db.commit()
 
-    async def delete(self, key: str):
+    async def delete(self, key: str) -> None:
         if not self._db: raise RuntimeError("Store not started")
         await self._db.execute(f"DELETE FROM {self.table_name} WHERE key = ?", (key,))
         await self._db.commit()
 
-    async def flush(self):
+    async def flush(self) -> None:
         if self._db:
             await self._db.commit()
 
-    async def checkpoint(self, stream_id: str, group_id: str, offset: str):
+    async def checkpoint(self, stream_id: str, group_id: str, offset: str) -> None:
         """
         Atomically store the offset. 
         Note: If multiple puts were done without commit, this commit will finalize them too.

@@ -3,13 +3,17 @@ from typing import Any
 from pspf.connectors.base import Source, Sink
 from pspf.utils.logging import get_logger
 
-class FileSource(Source[str]):
+class FileSource(Source):
     """Reads lines from a file."""
 
-    def __init__(self, path: str, delay: float = 0.0):
+    def __init__(self, path: str, delay: float = 0.0) -> None:
         super().__init__(name=f"FileSource({path})")
         self.path = path
         self.delay = delay
+        self.logger = get_logger(self.name)
+
+    async def emit(self, element: Any) -> None:
+        pass
 
     async def start(self) -> None:
         try:
@@ -29,10 +33,11 @@ class FileSource(Source[str]):
             raise
 
 
-class StorageSink(Sink[Any]):
-    def __init__(self, path: str):
+class StorageSink(Sink):
+    def __init__(self, path: str) -> None:
         super().__init__(name=f"StorageSink({path})")
         self.path = path
+        self.logger = get_logger(self.name)
 
     async def _process_captured(self, element: Any) -> None:
         try:
@@ -43,7 +48,7 @@ class StorageSink(Sink[Any]):
             raise
 
 
-class ConsoleSink(Sink[Any]):
+class ConsoleSink(Sink):
     def __init__(self, prefix: str = ""):
         super().__init__("ConsoleSink")
         self.prefix = prefix

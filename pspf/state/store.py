@@ -7,12 +7,13 @@ class StateStore(ABC):
     """
     
     @abstractmethod
-    async def start(self):
+    @abstractmethod
+    async def start(self) -> None:
         """Initialize the store (e.g. connect to DB)."""
         pass
 
     @abstractmethod
-    async def stop(self):
+    async def stop(self) -> None:
         """Close the store."""
         pass
 
@@ -22,27 +23,29 @@ class StateStore(ABC):
         pass
 
     @abstractmethod
-    async def put(self, key: str, value: Any):
+    @abstractmethod
+    async def put(self, key: str, value: Any) -> None:
         """Store a value by key."""
         pass
 
     @abstractmethod
-    async def put_batch(self, entries: Dict[str, Any]):
+    async def put_batch(self, entries: Dict[str, Any]) -> None:
         """Store multiple values in a batch."""
         pass
 
     @abstractmethod
-    async def delete(self, key: str):
+    @abstractmethod
+    async def delete(self, key: str) -> None:
         """Delete a key."""
         pass
 
     @abstractmethod
-    async def flush(self):
+    async def flush(self) -> None:
         """Force write to durable storage."""
         pass
 
     @abstractmethod
-    async def checkpoint(self, stream_id: str, group_id: str, offset: str):
+    async def checkpoint(self, stream_id: str, group_id: str, offset: str) -> None:
         """
         Atomically store the processing offset.
         In persistent stores, this should be in the same transaction as state updates.
