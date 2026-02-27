@@ -42,7 +42,10 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+> **Note**: While the example above uses `ValkeyConnector`, PSPF is backend-agnostic! You can swap it out with `KafkaConnector`, `MemoryBackend` (for testing), or the native `File` backend.
+
 ## Key Features
+- **Backend-Agnostic**: Run on Valkey, Kafka, Memory, or local Files.
 - **Type Safety**: Full Pydantic V2 integration for all events.
 - **Reliability**: Automatic message recovery and Dead Letter Queues.
 - **Observability**: Built-in Prometheus metrics and OpenTelemetry tracing.

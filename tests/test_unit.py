@@ -7,18 +7,18 @@ from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
 from pspf.telemetry import TelemetryManager
 
 # --- Schema Unit Tests ---
-class TestSchema(BaseModel):
+class DummySchema(BaseModel):
     name: str
 
 def test_schema_registry_registration():
-    SchemaRegistry.register("TestType", TestSchema)
-    assert SchemaRegistry.get_model("TestType") == TestSchema
+    SchemaRegistry.register("TestType", DummySchema)
+    assert SchemaRegistry.get_model("TestType") == DummySchema
 
 def test_schema_validation_success():
-    SchemaRegistry.register("TestType", TestSchema)
+    SchemaRegistry.register("TestType", DummySchema)
     data = {"event_type": "TestType", "name": "foo"}
     model = SchemaRegistry.validate(data)
-    assert isinstance(model, TestSchema)
+    assert isinstance(model, DummySchema)
     assert model.name == "foo"
 
 def test_schema_validation_fallback():

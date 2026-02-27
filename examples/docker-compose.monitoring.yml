@@ -7,7 +7,7 @@ services:
       - "6379:6379"
 
   pspf-demo:
-    build: .
+    build: ..
     command: python examples/valkey_demo.py
     environment:
       - VALKEY_HOST=valkey

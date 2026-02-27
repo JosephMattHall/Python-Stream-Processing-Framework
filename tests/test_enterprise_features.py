@@ -25,7 +25,7 @@ class TestEnterpriseFeatures(unittest.IsolatedAsyncioTestCase):
         self.mock_pipeline.hdel = MagicMock()
         self.mock_pipeline.execute = AsyncMock() 
         
-        self.mock_client.pipeline.return_value = self.mock_pipeline
+        self.mock_client.pipeline = MagicMock(return_value=self.mock_pipeline)
         
         # Helper to create backend with mocked connector
         self.backend = ValkeyStreamBackend(self.mock_connector, "test-stream", "group1", "consumer1")

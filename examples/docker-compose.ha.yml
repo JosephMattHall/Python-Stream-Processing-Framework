@@ -7,7 +7,7 @@ services:
       - "6379:6379"
 
   node-1:
-    build: .
+    build: ..
     command: python examples/ha_demo.py
     environment:
       - NODE_ID=node-1
@@ -20,10 +20,10 @@ services:
     depends_on:
       - valkey
     volumes:
-      - ./data:/app/data
+      - ../data:/app/data
 
   node-2:
-    build: .
+    build: ..
     command: python examples/ha_demo.py
     environment:
       - NODE_ID=node-2
@@ -36,4 +36,4 @@ services:
     depends_on:
       - valkey
     volumes:
-      - ./data:/app/data
+      - ../data:/app/data

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   inventory-app:
-    build: .
+    build: ..
     container_name: pspf-inventory
     ports:
       - "8000:8000"
@@ -16,7 +16,7 @@ services:
         condition: service_healthy
 
   courier-app:
-    build: .
+    build: ..
     container_name: pspf-courier
     ports:
       - "8001:8001"
@@ -30,7 +30,7 @@ services:
         condition: service_healthy
 
   fraud-app:
-    build: .
+    build: ..
     container_name: pspf-fraud
     ports:
       - "8002:8002"

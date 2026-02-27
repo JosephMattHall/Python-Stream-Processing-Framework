@@ -38,9 +38,9 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
         # Setup pipeline mock
         # client.pipeline() is synchronous and returns the pipeline object
         # The pipeline object is an async context manager
-        mock_pipeline = AsyncMock()
-        mock_pipeline.__aenter__.return_value = mock_pipeline
-        mock_pipeline.__aexit__.return_value = None
+        mock_pipeline = MagicMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_client.pipeline = MagicMock(return_value=mock_pipeline)
 
         # Mock XADD

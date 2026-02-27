@@ -4,6 +4,8 @@ PSPF is a lightweight, high-performance stream processing framework for Python. 
 
 It is designed for building event-driven applications, event sourcing systems, and data pipelines that need to be robust, replayable, and easy to deploy.
 
+> **Note**: While the Quick Start below uses Valkey (Redis), PSPF is backend-agnostic! You can also use Kafka, or the local-only Memory and File backends for testing without Docker.
+
 ## Key Features
 
 - **Valkey-Based Streams:** Production-ready stream processing using Valkey (or Redis) as the message broker.
@@ -64,3 +66,16 @@ Check out the [Tutorial](docs/tutorial.md) for a deeper dive.
 - [Observability Guide](docs/observability.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](docs/contributing.md)
+
+## About the Author
+
+**PSPF™** was designed and developed by Joseph Hall.
+
+I built this framework to solve specific challenges in stream processing—focusing on low-latency data handling, simplified deployments without JVM overhead, and ease of use. While my current professional background is in high-volume customer success and sales, my passion lies in engineering robust, scalable Python tools.
+
+## 🚀 Let's Connect
+
+I am currently looking for my next challenge in Software Engineering, Data Engineering, or DevOps. If you’re looking for a developer who understands both clean code and how to communicate with stakeholders, let’s talk!
+
+- **GitHub:** [https://github.com/JosephMattHall](https://github.com/JosephMattHall)
+- **Email:** joseph@josephmatthewhall.com

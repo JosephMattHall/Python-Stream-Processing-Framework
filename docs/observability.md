@@ -42,7 +42,7 @@ ADMIN_PORT=8001
 
 ## Grafana Dashboard
 
-A pre-built Grafana dashboard is available in `grafana/dashboard.json`. It visualizing:
+A pre-built Grafana dashboard is available in `examples/grafana/dashboard.json`. It visualizing:
 *   Real-time Throughput using `stream_messages_processed_total`.
 *   Consumer Group Lag using `stream_lag` (Critical for auto-scaling).
 *   P95 Latency.
@@ -50,7 +50,7 @@ A pre-built Grafana dashboard is available in `grafana/dashboard.json`. It visua
 
 ## Reference Stack (Docker Compose)
 
-The repository includes a `docker-compose.monitoring.yml` file that spins up a complete observability stack for testing and reference.
+The repository includes a `examples/docker-compose.monitoring.yml` file that spins up a complete observability stack for testing and reference.
 
 It includes:
 1.  **Valkey**: The stream storage backend.
@@ -60,6 +60,6 @@ It includes:
 
 To run it:
 ```bash
-docker compose -f docker-compose.monitoring.yml up --build
+docker compose -f examples/docker-compose.monitoring.yml up --build
 ```
 Access Grafana at [http://localhost:3000](http://localhost:3000).

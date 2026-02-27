@@ -1,66 +1,51 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.setuptools.packages.find]
-include = ["pspf*"]
-exclude = ["examples*", "tests*", "protos*"]
-
-[project]
+[tool.poetry]
 name = "pspf"
 version = "0.1.0-alpha.1"
 description = "Python Stream Processing Framework"
 readme = "README.md"
-requires-python = ">=3.11"
-license = "MIT"
-authors = [
-  {name = "Joseph Hall", email = "joseph@josephmatthewhall.com"},
-]
+authors = ["Joseph Hall <joseph@josephmatthewhall.com>"]
+license = "GPL-3.0-only"
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
-  "Operating System :: OS Independent",
-]
-dependencies = [
-    "fastapi>=0.100.0",
-    "uvicorn>=0.20.0",
-    "aiofiles>=23.0.0",
-    "msgpack>=1.0.0",
-    "valkey>=5.0.0",
-    "protobuf>=4.0.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "prometheus-client>=0.17.0",
-    "pydantic-settings>=2.0.0",
-    "typer>=0.9.0",
-    "httpx>=0.24.0",
-    "aiosqlite>=0.19.0",
 ]
 
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = ">=0.100.0"
+uvicorn = ">=0.20.0"
+aiofiles = ">=23.0.0"
+msgpack = ">=1.0.0"
+valkey = ">=5.0.0"
+protobuf = ">=4.0.0"
+opentelemetry-api = ">=1.20.0"
+opentelemetry-sdk = ">=1.20.0"
+prometheus-client = ">=0.17.0"
+pydantic-settings = ">=2.0.0"
+typer = ">=0.9.0"
+httpx = ">=0.24.0"
+aiosqlite = ">=0.19.0"
 
-[project.urls]
-Homepage = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework"
-Issues = "https://github.com/JosephMattHall/Python-Stream-Processing-Framework/issues"
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+mypy = "^1.8"
+black = "^24.2"
+isort = "^5.13"
+ruff = "^0.3"
+aiokafka = ">=0.8.0"
+pytest-mock = "^3.12"
+rocksdb-python = ">=0.1.0"
 
-[project.scripts]
+[tool.poetry.scripts]
 pspfctl = "pspf.cli:app"
-
-[project.optional-dependencies]
-dev = [
-  "pytest",
-  "pytest-asyncio",
-  "mypy",
-  "black",
-  "isort",
-  "ruff",
-  "aiokafka>=0.8.0",
-  "pytest-mock",
-]
-rocksdb = [
-    "rocksdb-python>=0.1.0"
-]
 
 
 [tool.mypy]
@@ -86,4 +71,7 @@ markers = [
     "integration: marks tests as integration tests that require live infrastructure",
     "valkey: tests that specifically require Valkey/Redis",
     "kafka: tests that require Kafka",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
 ]
