@@ -33,7 +33,7 @@ A hybrid of:
 
 ---
 
-## Phase 2 — v0.2.x Beta (Next 1-2 Months)
+## Phase 2 — v0.2.x Beta 
 **Focus**: Operability, robustness, and stateful processing.
 
 **Goals:**
@@ -42,16 +42,21 @@ A hybrid of:
 - **Admin API Expansion**: Expand the `8001` control endpoints to report detailed partition cluster status.
 - **CLI Enhancements**: Add cluster management, diagnostic checks, and more fine-grained replay tools to `pspfctl`.
 - **Structured Logging Enhancements**: Further refine NDJSON output context.
+- **Time Semantics & Watermarks**: Introduce Event Time vs Processing Time concepts and watermarking for handling late-arriving data.
+- **Windowing Primitives**: Basic Tumbling and Sliding window support to enable bounded aggregations on unbounded streams.
+- **State Store TTL**: Time-to-live and automatic compaction mechanisms for state stores to prevent memory bloat over time.
 
 ---
 
-## Phase 3 — v0.5.x High Availability (3-4 Months)
+## Phase 3 — v0.5.x High Availability 
 **Focus**: Multi-node durability.
 
 **Goals:**
 - **Replication**: Leader/follower partition model for the Native File Log.
 - **Failover**: Automatic leader election and resynchronization.
 - **Rebalancing**: Zero-downtime scaling and automatic consumer partition distribution for non-networked backends.
+- **Transactional State (EOS)**: Atomic processing guarantees across offset commits and state store updates.
+- **Interactive Queries**: Expose local RocksDB/Memory state stores via API so external services can query aggregations without a secondary database.
 
 ---
 
@@ -63,6 +68,7 @@ A hybrid of:
 - Decorator-based stream handlers (`@stream.subscribe`).
 - Mature Helm charts and Kubernetes deployment examples.
 - Comprehensive crash testing benchmarks.
+- **Complex Topologies & Joins**: Support for stream-to-stream and stream-to-table joins.
 
 ---
 
