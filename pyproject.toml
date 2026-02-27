@@ -8,7 +8,7 @@ exclude = ["examples*", "tests*", "protos*"]
 
 [project]
 name = "pspf"
-version = "0.1.0b1"
+version = "0.1.0-alpha.1"
 description = "Python Stream Processing Framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
 ]
 dependencies = [
     "fastapi>=0.100.0",
