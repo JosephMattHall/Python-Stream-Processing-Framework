@@ -18,7 +18,7 @@ It is designed for building event-driven applications, event sourcing systems, a
 ## Installation
 
 ```bash
-pip install .
+pip install pspf
 ```
 
 ## Quick Start: User Signups
