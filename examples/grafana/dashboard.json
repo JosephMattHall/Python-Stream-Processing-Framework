@@ -25,7 +25,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus-ds"
       },
       "gridPos": {
         "h": 8,
@@ -51,7 +51,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-ds"
           },
           "editorMode": "code",
           "expr": "rate(stream_messages_processed_total[1m])",
@@ -66,7 +66,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus-ds"
       },
       "gridPos": {
         "h": 8,
@@ -91,7 +91,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-ds"
           },
           "editorMode": "code",
           "expr": "stream_lag",
@@ -106,7 +106,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus-ds"
       },
       "gridPos": {
         "h": 8,
@@ -131,7 +131,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-ds"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(stream_processing_seconds_bucket[5m])) by (le, stream))",
@@ -146,7 +146,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus-ds"
       },
       "gridPos": {
         "h": 8,
@@ -170,7 +170,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-ds"
           },
           "editorMode": "code",
           "expr": "pspf_worker_status",
@@ -185,7 +185,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "prometheus-ds"
       },
       "gridPos": {
         "h": 8,
@@ -218,7 +218,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-ds"
           },
           "editorMode": "code",
           "expr": "sum(stream_messages_processed_total) by (status)",
