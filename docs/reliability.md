@@ -2,14 +2,20 @@
 
 PSPF is designed for enterprise-grade reliability, ensuring that events are processed accurately and recovered automatically in the event of failures.
 
-## Exactly-Once Semantics
-
 PSPF achieves **Exactly-Once Semantics (EOS)** through a combination of:
-1. **At-Least-Once Delivery**: Messages are kept in the backend until they are explicitly acknowledged (ACKed) by the worker.
-2. **Idempotent Processing**: Built-in deduplication ensures that if a message is redelivered (e.g., after a worker crash), it is effectively processed only once.
+1. **Transactional State Updates**: Built-in state stores (SQLite, RocksDB) support atomic transactions.
+2. **Atomic Checkpointing**: The stream offset (checkpoint) is committed in the *same* database transaction as the user's state changes. This ensures that state and offsets never drift.
+3. **At-Least-Once Delivery**: Messages are kept in the backend until they are explicitly acknowledged (ACKed). If a crash occurs, the message is redelivered, but the transactional state ensures we don't double-process the effects.
 
-### Deduplication
-When using the `Stream` facade with a supported backend, PSPF tracks message IDs and ensures that the user-provided `handler` is not invoked twice for the same message ID within a configurable window.
+### Atomic Commit Protocol
+When a message is processed:
+1. A transaction is started in the `StateStore`.
+2. Your `handler` is executed, making calls to `ctx.state.put()`.
+3. The `BatchProcessor` writes the new stream offset to the internal `__checkpoints__` table.
+4. The transaction is **COMMITTED**.
+5. Only then is the message ACKed in the backend (Valkey/Kafka).
+
+If the worker crashes between Step 4 and 5, the message will be redelivered. However, since the checkpoint was already committed in Step 3, the `BatchProcessor` will see that this offset has already been processed and skip it (or the state will already match), effectively guaranteeing EOS.
 
 ## Failure Handling
 

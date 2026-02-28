@@ -64,6 +64,9 @@ async def test_tumbling_window_aggregation(temp_dir):
         # Give it a second to process the log
         await asyncio.sleep(1.0)
         
+        # Shutdown the processor gracefully
+        await stream.processor.shutdown()
+        
         # Cancel the loop
         task.cancel()
         try:

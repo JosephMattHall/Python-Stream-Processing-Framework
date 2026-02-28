@@ -1,5 +1,5 @@
 site_name: PSPF - Python Stream Processing Framework
-site_url: https://example.com/pspf
+site_url: https://NONEyet.com/pspf
 site_description: Enterprise-ready stream processing with Python and Valkey.
 repo_url: https://github.com/JosephMattHall/Python-Stream-Processing-Framework
 
@@ -43,6 +43,7 @@ nav:
       - Partitioned Concurrency: concurrency.md
       - Stateful Processing: state.md
       - Schema Evolution: schema-evolution.md
+      - Plugin System: plugins.md
   - Backends: 
       - Overview: backends-overview.md
       - API Reference: api/backends.md

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pspf.fullname" . }}-admin
+  labels:
+    app.kubernetes.io/name: {{ include "pspf.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: admin-api
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "pspf.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}

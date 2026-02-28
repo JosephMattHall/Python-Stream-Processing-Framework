@@ -39,6 +39,35 @@ processor = BatchProcessor(backend, state_store=store)
 # ...
 ```
 
-## Checkpointing (Experimental)
+## Interactive Queries (REST API)
 
-For large-scale state recovery, PSPF supports checkpointing state to a persistent log, allowing you to reconstruct state by replaying events from a specific point in time.
+PSPF allows you to query the state stores of live workers using a built-in REST API. This is useful for building dashboards or exposing real-time service data.
+
+### 1. Enable the Admin API
+The Admin API is enabled by default in the `BatchProcessor`. You can configure the port via the `admin_port` setting.
+
+### 2. Querying State
+You can fetch any key from the local state store:
+
+```bash
+curl http://localhost:8000/state/user_id_123
+```
+
+**Response:**
+```json
+{
+  "key": "user_id_123",
+  "value": {
+    "points": 1500,
+    "tier": "gold"
+  }
+}
+```
+
+## Checkpointing & EOS
+
+For production reliability, PSPF uses **Atomic Checkpointing**. This means the stream offset (where the worker is in the log) is stored in the *same* database as your state. 
+
+- When a transaction commits, both your `ctx.state.put()` calls and the current message offset are saved together.
+- This provides **Exactly-Once Semantics (EOS)** even if the application process or the database connection is interrupted.
+

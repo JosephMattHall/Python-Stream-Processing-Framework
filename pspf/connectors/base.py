@@ -1,32 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any, Optional
 
-class Source(ABC):
-    """Abstract base class for data sources."""
-    def __init__(self, name: str):
-        self.name = name
-
-    @abstractmethod
-    async def start(self) -> None:
-        pass
-
-    @abstractmethod
-    async def stop(self) -> None:
-        pass
-
-class Sink(ABC):
-    """Abstract base class for data sinks."""
-    def __init__(self, name: str):
-        self.name = name
-
-    @abstractmethod
-    async def start(self) -> None:
-        pass
-
-    @abstractmethod
-    async def stop(self) -> None:
-        pass
-
 class StreamingBackend(ABC):
     """
     Abstract Base Class for all Streaming Backends.
@@ -47,6 +21,10 @@ class StreamingBackend(ABC):
         pass
 
     @abstractmethod
+    def clone_with_topic(self, topic: str) -> "StreamingBackend":
+        """Create a new backend instance for a different topic, sharing the underlying connection."""
+        pass
+
     @abstractmethod
     async def connect(self) -> None:
         """Establish connection to the backend."""
@@ -57,7 +35,6 @@ class StreamingBackend(ABC):
         """Close connection to the backend."""
         pass
 
-    @abstractmethod
     @abstractmethod
     async def ping(self) -> bool:
         """Check connection health."""

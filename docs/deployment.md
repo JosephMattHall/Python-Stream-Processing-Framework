@@ -43,19 +43,41 @@ PSPF uses **Partition Leases** via Valkey. To scale a pipeline:
 2.  Run multiple instances of your application container.
 3.  The `PartitionLeaseManager` will ensure each worker only processes its assigned partitions.
 
-## 5. Using PSPF as a Library
+## 5. Kubernetes & Helm (Recommended)
 
-To use PSPF in your own projects outside of this repository:
+For production clusters, we recommend using the integrated Helm chart.
+
+```bash
+helm install pspf ./helm/pspf
+```
+
+The chart includes:
+- **Workers**: Scalable `Deployment` with partition self-balancing.
+- **Valkey**: Bundled high-performance message broker and coordinator.
+- **Admin API**: Exposed service for metrics and interactive queries.
+
+## 6. Using PSPF as a Library
+
+To use PSPF in your own projects:
 
 1.  **Install**:
     ```bash
-    pip install git+https://github.com/JosephMattHall/Python-Stream-Processing-Framework.git
+    pip install pspf
     ```
 2.  **Import**:
     ```python
-    from pspf import Pipeline, StreamRecord, Operator
+    from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
     
-    # Build your pipeline
-    pipeline = Pipeline().read_from(my_source).map(my_func).write_to(my_sink)
-    pipeline.run()
+    # 1. Setup Backend
+    backend = ValkeyStreamBackend(ValkeyConnector(), "topic", "group")
+    
+    # 2. Build your Stream
+    stream = Stream(backend=backend)
+    
+    @stream.subscribe("topic")
+    async def handler(event):
+        print(event)
+
+    await stream.run_forever()
     ```
+

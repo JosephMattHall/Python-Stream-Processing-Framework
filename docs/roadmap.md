@@ -19,56 +19,28 @@ A hybrid of:
 
 ---
 
-## Phase 1 — v0.1.0-alpha (Current)
-**Status**: Alpha Release
+## Phase 1 — v0.1.0-alpha
+**Status**: Completed
 
-**Goals completed:**
-- Core `Stream` and `BatchProcessor` facades.
-- Multi-backend architecture (Valkey, Kafka, Memory, File/LocalLog).
-- Pydantic-based schema validation and registry.
-- Basic consumer group semantics for Valkey and Kafka.
-- Exactly-once semantics through idempotent processing and dead-letter queues.
-- OpenTelemetry and Prometheus observability out of the box.
-- CLI foundation (`pspfctl`).
+## Phase 2 — v0.2.x-beta
+**Status**: Completed
 
----
-
-## Phase 2 — v0.2.x Beta 
-**Focus**: Operability, robustness, and stateful processing.
-
-**Goals:**
-- **LocalLog Advancements**: Log segmentation (rotating log files), safe recovery scanning after crash, and per-record checksums.
-- **State Store Integration**: Simplify attaching state stores (`SQLite`, `RocksDB`) directly via the high-level `Stream` facade.
-- **Admin API Expansion**: Expand the `8001` control endpoints to report detailed partition cluster status.
-- **CLI Enhancements**: Add cluster management, diagnostic checks, and more fine-grained replay tools to `pspfctl`.
-- **Structured Logging Enhancements**: Further refine NDJSON output context.
-- **Time Semantics & Watermarks**: Introduce Event Time vs Processing Time concepts and watermarking for handling late-arriving data.
-- **Windowing Primitives**: Basic Tumbling and Sliding window support to enable bounded aggregations on unbounded streams.
-- **State Store TTL**: Time-to-live and automatic compaction mechanisms for state stores to prevent memory bloat over time.
-
----
-
-## Phase 3 — v0.5.x High Availability 
-**Focus**: Multi-node durability.
-
-**Goals:**
-- **Replication**: Leader/follower partition model for the Native File Log.
-- **Failover**: Automatic leader election and resynchronization.
-- **Rebalancing**: Zero-downtime scaling and automatic consumer partition distribution for non-networked backends.
-- **Transactional State (EOS)**: Atomic processing guarantees across offset commits and state store updates.
-- **Interactive Queries**: Expose local RocksDB/Memory state stores via API so external services can query aggregations without a secondary database.
-
----
+## Phase 3 — v0.5.x-ha
+**Status**: Completed
 
 ## Phase 4 — v1.0 Production Release
-**Focus**: Stability and ecosystem growth.
+**Status**: Completed (Current)
 
-**Goals:**
+**Key Accomplishments:**
 - Stable Plugin ecosystem.
 - Decorator-based stream handlers (`@stream.subscribe`).
 - Mature Helm charts and Kubernetes deployment examples.
 - Comprehensive crash testing benchmarks.
-- **Complex Topologies & Joins**: Support for stream-to-stream and stream-to-table joins.
+- Support for complex topologies and joins.
+- Transactional state and atomic checkpointing (EOS).
+- Cluster rebalancing and failover.
+- Interactive queries API.
+
 
 ---
 

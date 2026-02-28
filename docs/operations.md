@@ -44,3 +44,23 @@ groups:
     labels:
       severity: warning
 ```
+
+## High Availability & Clustering
+
+PSPF supports distributed coordination via a `ClusterCoordinator` (backed by Valkey). 
+
+### Node Registration
+Each worker registers itself in Valkey with a TTL. You can view the cluster status via the Admin API:
+```bash
+curl http://localhost:8000/cluster/status
+```
+
+### Partition Rebalancing
+PSPF implements **Automatic Rebalancing** for zero-downtime scaling:
+1. **Fair Share Calculation**: Nodes periodically scan the cluster state to determine the total number of partitions and active nodes.
+2. **Voluntary Relinquishment**: if a node holds significantly more partitions than its fair share (e.g., after many new workers join), it will voluntarily release some of its partition locks.
+3. **Seamless Handover**: Idle workers will then claim these released partitions and start processing, ensuring an even load distribution.
+
+### Failover
+If a worker crashes, its heartbeat TTL in Valkey will expire (default 10s). Other workers will then use `try_acquire_leadership()` to take over the orphaned partitions, ensuring continuous processing.
+

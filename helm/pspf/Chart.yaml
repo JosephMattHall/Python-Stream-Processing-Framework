@@ -1,0 +1,12 @@
+apiVersion: v2
+name: pspf
+description: A Helm chart for Python Stream Processing Framework (PSPF) Clusters
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: valkey
+    version: 8.0.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: valkey.enabled

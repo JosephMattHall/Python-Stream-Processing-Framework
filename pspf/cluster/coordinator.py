@@ -79,6 +79,26 @@ class ClusterCoordinator:
                         logger.warning(f"Lost leadership for {p_key}")
                         self._held_partitions.remove(p_key)
                         
+                # 3. Simple Rebalancing Check
+                try:
+                    cursor, node_keys = await self._client.scan(0, match="pspf:nodes:*")
+                    all_nodes_count = len(node_keys)
+                    if all_nodes_count > 1 and self._held_partitions:
+                        # We count known partition leader keys to estimate total active partitions
+                        cursor, part_keys = await self._client.scan(0, match="pspf:partition:*:leader")
+                        total_parts = len(part_keys) 
+                        
+                        # Add 1 to handle uneven remainders safely
+                        fair_share = (total_parts // all_nodes_count) + 1
+                        
+                        if len(self._held_partitions) > fair_share:
+                            # Voluntarily give up one partition lock so an idle node can claim it
+                            relinquished_p_key = self._held_partitions.pop(0)
+                            logger.info(f"Rebalancing: voluntarily giving up partition {relinquished_p_key} (holding {len(self._held_partitions)+1}, fair share <= {fair_share})")
+                            await self._client.delete(f"pspf:partition:{relinquished_p_key}:leader")
+                except Exception as e:
+                    logger.warning(f"Rebalancing routine encountered an issue: {e}")
+                        
             except Exception as e:
                 logger.error(f"Heartbeat error: {e}")
             

@@ -40,14 +40,6 @@ import asyncio
 from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
 from schema import OrderCreated
 
-async def process_order(event: OrderCreated):
-    """
-    Business logic called for every new event.
-    """
-    print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
-    await asyncio.sleep(0.5) # Simulate work
-    print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
-
 async def main():
     # 1. Configure the Connector
     connector = ValkeyConnector(host='localhost', port=6379)
@@ -59,11 +51,21 @@ async def main():
         group_name="fulfillment-service", 
         consumer_name="worker-1"
     )
+    
+    # 3. Define the Stream
+    stream = Stream(backend=backend)
 
-    # 3. Start the Stream Processing Loop
+    # 4. Register the Handler
+    @stream.subscribe("orders", schema=OrderCreated)
+    async def process_order(event: OrderCreated):
+        print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
+        await asyncio.sleep(0.5) 
+        print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
+
+    # 5. Start the Stream Processing Loop
     print("🚀 Fulfillment Service Started...")
-    async with Stream(backend, schema=OrderCreated) as stream:
-        await stream.run(process_order)
+    async with stream:
+        await stream.run_forever()
 
 if __name__ == "__main__":
     try:

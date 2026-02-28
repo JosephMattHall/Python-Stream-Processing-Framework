@@ -2,7 +2,8 @@ import aiosqlite
 import pickle
 import pickle
 import os
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, AsyncIterator
+from contextlib import asynccontextmanager
 from pspf.state.store import StateStore
 from pspf.utils.logging import get_logger
 
@@ -17,6 +18,7 @@ class SQLiteStateStore(StateStore):
         self.path = path
         self.table_name = table_name
         self._db: Optional[aiosqlite.Connection] = None
+        self._in_transaction = False
 
     async def start(self) -> None:
         # Ensure directory exists
@@ -35,6 +37,26 @@ class SQLiteStateStore(StateStore):
         )
         await self._db.commit()
         logger.info(f"Opened SQLite State Store at {self.path}")
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[None]:
+        if not self._db: raise RuntimeError("Store not started")
+        if self._in_transaction:
+            # Nested transactions not supported yet
+            yield
+            return
+
+        self._in_transaction = True
+        try:
+            await self._db.execute("BEGIN TRANSACTION")
+            yield
+            await self._db.commit()
+        except Exception as e:
+            await self._db.rollback()
+            logger.error(f"Transaction failed, rolled back: {e}")
+            raise
+        finally:
+            self._in_transaction = False
 
     async def stop(self) -> None:
         if self._db:
@@ -61,8 +83,8 @@ class SQLiteStateStore(StateStore):
             f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
             (key, data)
         )
-        # Auto-commit for single puts
-        await self._db.commit()
+        if not self._in_transaction:
+            await self._db.commit()
 
     async def put_batch(self, entries: Dict[str, Any]) -> None:
         if not self._db: raise RuntimeError("Store not started")
@@ -78,12 +100,14 @@ class SQLiteStateStore(StateStore):
             f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
             rows
         )
-        await self._db.commit()
+        if not self._in_transaction:
+            await self._db.commit()
 
     async def delete(self, key: str) -> None:
         if not self._db: raise RuntimeError("Store not started")
         await self._db.execute(f"DELETE FROM {self.table_name} WHERE key = ?", (key,))
-        await self._db.commit()
+        if not self._in_transaction:
+            await self._db.commit()
 
     async def flush(self) -> None:
         if self._db:
@@ -100,7 +124,8 @@ class SQLiteStateStore(StateStore):
             "INSERT OR REPLACE INTO pspf_offsets (stream_id, group_id, offset) VALUES (?, ?, ?)",
             (stream_id, group_id, offset)
         )
-        await self._db.commit()
+        if not self._in_transaction:
+            await self._db.commit()
 
     async def get_checkpoint(self, stream_id: str, group_id: str) -> Optional[str]:
         if not self._db: raise RuntimeError("Store not started")

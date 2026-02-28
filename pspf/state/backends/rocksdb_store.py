@@ -49,6 +49,7 @@ class RocksDBStateStore(StateStore):
             logger.info("Closed RocksDB State Store")
 
     async def get(self, key: str, default: Any = None) -> Any:
+        import time
         if not self._db: raise RuntimeError("Store not started")
         
         loop = asyncio.get_running_loop()
@@ -56,16 +57,25 @@ class RocksDBStateStore(StateStore):
         
         if val is not None:
             try:
-                return pickle.loads(val)
+                obj = pickle.loads(val)
+                if isinstance(obj, dict) and "_v" in obj and "_exp" in obj:
+                    if obj["_exp"] is not None and time.time() > obj["_exp"]:
+                        await self.delete(key) # Lazy eviction
+                        return default
+                    return obj["_v"]
+                return obj # Backwards compatibility
             except Exception as e:
                 logger.error(f"Failed to unpickle key '{key}': {e}")
                 return default
         return default
 
-    async def put(self, key: str, value: Any) -> None:
+    async def put(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+        import time
         if not self._db: raise RuntimeError("Store not started")
         
-        data = pickle.dumps(value)
+        expires_at = time.time() + ttl_seconds if ttl_seconds is not None else None
+        wrapped = {"_v": value, "_exp": expires_at}
+        data = pickle.dumps(wrapped)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, lambda: self._db.put(key.encode(), data))
 

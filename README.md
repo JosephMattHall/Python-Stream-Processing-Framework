@@ -6,14 +6,12 @@ It is designed for building event-driven applications, event sourcing systems, a
 
 > **Note**: While the Quick Start below uses Valkey (Redis), PSPF is backend-agnostic! You can also use Kafka, or the local-only Memory and File backends for testing without Docker.
 
-## Key Features
-
 - **Valkey-Based Streams:** Production-ready stream processing using Valkey (or Redis) as the message broker.
-- **Kafka-like Semantics:** Partitions, consumer groups, and high-performance throughput.
-- **Exactly-Once Semantics:** Idempotent processing with built-in deduplication.
-- **Partitioned Concurrency:** Automatic load balancing across consumer instances.
-- **Built-in Observability:** Prometheus metrics, Grafana dashboards, and Admin API.
-- **Native Event Log (Preview):** Lightweight file-based log for local-only use cases.
+- **Decorator API:** SImple `@stream.subscribe` and `@stream.window` handlers for rapid development.
+- **Exactly-Once Semantics:** Atomic transactions where state and offsets are committed together.
+- **Zero-Downtime Scaling:** Automatic partition rebalancing across worker clusters.
+- **Cloud Native:** Built-in Helm charts for Kubernetes and Prometheus monitoring.
+- **Built-in Topologies:** Powerful `Router` and `Joiner` primitives for complex pipelines.
 
 ## Installation
 
@@ -23,7 +21,21 @@ pip install pspf
 
 ## Quick Start: User Signups
 
-PSPF makes it easy to handle high-volume event streams. Here is a simple processor that handles user signups.
+PSPF makes it easy to handle high-volume event streams. 
+
+```python
+from pspf import Stream, ValkeyConnector, ValkeyStreamBackend, BaseEvent
+
+stream = Stream(backend=ValkeyStreamBackend(ValkeyConnector(), "signups", "group1"))
+
+@stream.subscribe("signups")
+async def handle_signup(event):
+    print(f"Welcome {event['email']}!")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(stream.run_forever())
+```
 
 ### 1. Requirements
 Ensure you have Valkey (or Redis) running:

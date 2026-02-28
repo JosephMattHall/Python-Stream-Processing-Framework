@@ -47,6 +47,19 @@ class MemoryBackend(StreamingBackend):
     def group_name(self) -> str:
         return self._group_name
 
+    def clone_with_topic(self, topic: str) -> "MemoryBackend":
+        """Create a new backend instance for a different topic, sharing the underlying memory structures."""
+        mb = MemoryBackend(stream_key=topic, group_name=self.group_name)
+        mb._streams = self._streams
+        mb._pel = self._pel
+        mb._offsets = self._offsets
+        mb._retries = self._retries
+        mb.dlq = self.dlq
+        mb._last_ts = self._last_ts
+        mb._last_seq = self._last_seq
+        mb._connected = self._connected
+        return mb
+
     async def connect(self) -> None:
         self._connected = True
         logger.info("Connected to MemoryBackend")

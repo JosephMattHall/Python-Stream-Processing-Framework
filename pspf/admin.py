@@ -47,6 +47,23 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
             "backend": getattr(processor.backend, "stream_key", "unknown")
         }
 
+    @app.get("/state/{key}")
+    async def get_state(key: str) -> Dict[str, Any]:
+        """Interactive Query: fetch a key from the local state store."""
+        if not processor.state_store:
+            raise HTTPException(status_code=404, detail="No state store configured on this worker")
+        
+        try:
+            val = await processor.state_store.get(key)
+            if val is None:
+                raise HTTPException(status_code=404, detail=f"Key {key} not found")
+            return {"key": key, "value": val}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error querying state: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     @app.get("/cluster/status")
     async def cluster_status() -> Dict[str, Any]:
         """Returns detailed cluster and partition status."""
@@ -84,6 +101,26 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
                  raise HTTPException(status_code=501, detail="Replication not enabled on this node")
         except Exception as e:
             logger.error(f"Replication failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/internal/pull/{partition}")
+    async def pull_records(partition: int, offset: int = 0) -> list[Dict[str, Any]]:
+        """
+        Internal endpoint for followers to pull missing records from the leader.
+        """
+        try:
+            if hasattr(processor, "replicated_log") and processor.replicated_log:
+                records = []
+                # Read up to 100 records
+                async for r in processor.replicated_log._local.read(partition, offset):
+                    records.append(r.model_dump(mode='json'))
+                    if len(records) >= 100:
+                        break
+                return records
+            else:
+                 raise HTTPException(status_code=501, detail="Replication not enabled on this node")
+        except Exception as e:
+            logger.error(f"Pull failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     return app
