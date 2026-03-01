@@ -1,6 +1,6 @@
 # PSPF Roadmap 2026: Hardening for Scale & Security
 
-Based on the RC1 audit, this roadmap outlines the evolution of PSPF from a functional framework to an enterprise-hardened streaming platform.
+This roadmap outlines the evolution of PSPF from a functional framework to an enterprise-hardened streaming platform.
 
 ---
 
