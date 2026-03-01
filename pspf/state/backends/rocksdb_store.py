@@ -1,4 +1,5 @@
 import pickle
+import json
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -14,9 +15,10 @@ class RocksDBStateStore(StateStore):
     Values are pickled before storage.
     Operations are wrapped in a thread pool to avoid blocking the event loop.
     """
-    def __init__(self, path: str, read_only: bool = False):
+    def __init__(self, path: str, read_only: bool = False, options: Optional[Dict[str, Any]] = None):
         self.path = path
         self.read_only = read_only
+        self.options = options or {}
         self._db: Any = None
         self._executor = ThreadPoolExecutor(max_workers=1) # Sequential access for safety
         self._checkpoint_prefix = b"__pspf_offset__:"
@@ -37,6 +39,17 @@ class RocksDBStateStore(StateStore):
         def _open() -> Any:
             opts = rocksdb.Options()
             opts.create_if_missing = True
+            
+            # Apply tuning options
+            if "block_cache_size" in self.options:
+                opts.block_cache = rocksdb.LRUCache(self.options["block_cache_size"])
+            if "write_buffer_size" in self.options:
+                opts.write_buffer_size = self.options["write_buffer_size"]
+            if "max_open_files" in self.options:
+                opts.max_open_files = self.options["max_open_files"]
+            if "compression" in self.options:
+                opts.compression = self.options["compression"] # e.g. rocksdb.CompressionType.snappy_compression
+                
             return rocksdb.DB(self.path, opts, read_only=self.read_only)
             
         self._db = await loop.run_in_executor(self._executor, _open)
@@ -57,7 +70,13 @@ class RocksDBStateStore(StateStore):
         
         if val is not None:
             try:
-                obj = pickle.loads(val)
+                # Try JSON first (for cross-language compatibility)
+                try:
+                    obj = json.loads(val.decode())
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    # Fallback to pickle for legacy data
+                    obj = pickle.loads(val)
+                
                 if isinstance(obj, dict) and "_v" in obj and "_exp" in obj:
                     if obj["_exp"] is not None and time.time() > obj["_exp"]:
                         await self.delete(key) # Lazy eviction
@@ -65,7 +84,7 @@ class RocksDBStateStore(StateStore):
                     return obj["_v"]
                 return obj # Backwards compatibility
             except Exception as e:
-                logger.error(f"Failed to unpickle key '{key}': {e}")
+                logger.error(f"Failed to deserialize key '{key}': {e}")
                 return default
         return default
 
@@ -75,7 +94,7 @@ class RocksDBStateStore(StateStore):
         
         expires_at = time.time() + ttl_seconds if ttl_seconds is not None else None
         wrapped = {"_v": value, "_exp": expires_at}
-        data = pickle.dumps(wrapped)
+        data = json.dumps(wrapped).encode()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, lambda: self._db.put(key.encode(), data))
 
@@ -86,7 +105,8 @@ class RocksDBStateStore(StateStore):
         def _batch() -> None:
             batch = rocksdb.WriteBatch()
             for k, v in entries.items():
-                batch.put(k.encode(), pickle.dumps(v))
+                data = json.dumps(v).encode()
+                batch.put(k.encode(), data)
             self._db.write(batch)
             
         loop = asyncio.get_running_loop()

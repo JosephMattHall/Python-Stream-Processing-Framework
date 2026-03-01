@@ -2,6 +2,10 @@ from typing import Dict, Any, TYPE_CHECKING
 from fastapi import FastAPI, HTTPException
 from pspf.utils.logging import get_logger
 from pspf.models import StreamRecord
+from pspf.admin.dashboard_assets import DASHBOARD_HTML
+from fastapi.responses import HTMLResponse
+import zlib
+import httpx
 
 if TYPE_CHECKING:
     from pspf.processor import BatchProcessor
@@ -16,6 +20,11 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
         processor: The active BatchProcessor instance to control.
     """
     app = FastAPI(title="PSPF Admin API", version="0.1.0")
+    
+    @app.get("/", response_class=HTMLResponse)
+    async def dashboard() -> str:
+        """Serves the embedded worker dashboard."""
+        return DASHBOARD_HTML
 
     @app.get("/health")
     async def health_check() -> Dict[str, str]:
@@ -49,10 +58,48 @@ def create_admin_app(processor: "BatchProcessor") -> FastAPI:
 
     @app.get("/state/{key}")
     async def get_state(key: str) -> Dict[str, Any]:
-        """Interactive Query: fetch a key from the local state store."""
+        """Interactive Query: fetch a key from the cluster state store."""
         if not processor.state_store:
             raise HTTPException(status_code=404, detail="No state store configured on this worker")
         
+        # Check ownership if HA is enabled
+        if hasattr(processor, "replicated_log") and processor.replicated_log:
+            try:
+                log = processor.replicated_log
+                coordinator = log._coordinator
+                num_partitions = log.partitions()
+                
+                # Determine target partition (consistent with LocalLog)
+                target_p = zlib.crc32(key.encode()) % num_partitions
+                target_p_str = str(target_p)
+                
+                # If we don't hold this partition, find the leader and proxy
+                if target_p_str not in coordinator._held_partitions:
+                    leader = await coordinator.get_leader_node(target_p_str)
+                    if leader:
+                        url = f"http://{leader['host']}:{leader['port']}/state/{key}"
+                        async with httpx.AsyncClient(timeout=2.0) as client:
+                            try:
+                                resp = await client.get(url)
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    data["_metadata"] = {"proxied": True, "leader_id": leader["id"]}
+                                    return data
+                                elif resp.status_code == 404:
+                                    raise HTTPException(status_code=404, detail=f"Key {key} not found on leader")
+                                else:
+                                    raise HTTPException(status_code=502, detail=f"Leader error: {resp.text}")
+                            except httpx.RequestError as e:
+                                logger.error(f"Failed to proxy query to {url}: {e}")
+                                raise HTTPException(status_code=503, detail="State leader unreachable")
+                    else:
+                        # Fallback: Partition might be in transition, try local just in case
+                        logger.warning(f"No leader for partition {target_p_str}, querying local as fallback")
+            except Exception as e:
+                if isinstance(e, HTTPException): raise
+                logger.error(f"Error in distributed query routing: {e}")
+        
+        # Local Query
         try:
             val = await processor.state_store.get(key)
             if val is None:

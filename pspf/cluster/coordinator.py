@@ -4,13 +4,14 @@ import time
 import json
 from typing import Optional, List, Dict, Any
 from pspf.utils.logging import get_logger
+from pspf.cluster.interface import ClusterCoordinator as IClusterCoordinator
 import valkey.asyncio as valkey
 
 logger = get_logger("ClusterCoordinator")
 
-class ClusterCoordinator:
+class ValkeyClusterCoordinator(IClusterCoordinator):
     """
-    Manages node registration, heartbeats, and leader election using Valkey.
+    Valkey implementation of ClusterCoordinator.
     
     Keys:
     - pspf:nodes:<node_id> -> Metadata (TTL 10s)
@@ -178,3 +179,6 @@ class ClusterCoordinator:
                 break
                 
         return nodes
+
+# Alias for backward compatibility
+ClusterCoordinator = ValkeyClusterCoordinator
