@@ -116,6 +116,12 @@ class Stream(Generic[T]):
                 await p.shutdown()
             if self.state_store:
                 await self.state_store.stop()
+
+    async def stop(self) -> None:
+        """Stop all running processors."""
+        for p in self._processors:
+            await p.shutdown()
+        logger.info("Stream stopped.")
         
     async def health(self) -> Dict[str, str]:
         """
