@@ -48,6 +48,7 @@ class BatchProcessor:
         self.tracer = self.telemetry.get_tracer()
         self._paused = False
         self._start_admin = start_admin_server
+        self._background_tasks = set()
 
     def pause(self) -> None:
         """Pause message consumption."""
@@ -124,11 +125,16 @@ class BatchProcessor:
 
         # Start Admin Server
         admin_task = None
+        # Start background health/api server
         if self._start_admin:
-            admin_task = asyncio.create_task(self._start_admin_server())
+            task = asyncio.create_task(self._start_api_server())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
         
         # Start Lag Monitor
         monitor_task = asyncio.create_task(self._monitor_metrics(interval=10.0))
+        self._background_tasks.add(monitor_task)
+        monitor_task.add_done_callback(self._background_tasks.discard)
         
         # Set Worker Status = 1
         consumer_name = getattr(self.backend, 'consumer_name', 'unknown')
@@ -218,20 +224,20 @@ class BatchProcessor:
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
 
-    async def _start_admin_server(self) -> None:
+    async def _start_api_server(self) -> None:
         """
-        Starts the Admin API server.
+        Starts the Cluster API server for RPC and Health checks.
         """
         import os
         if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("NO_ADMIN"):
-            logger.info("Skipping Admin API server start during tests.")
+            logger.info("Skipping Cluster API server start during tests.")
             return
 
         try:
             from uvicorn import Config, Server
-            from pspf.admin import create_admin_app
+            from pspf.api import create_api_app
             
-            app = create_admin_app(self)
+            app = create_api_app(self)
             config = Config(
                 app=app, 
                 host="0.0.0.0", 
@@ -240,15 +246,15 @@ class BatchProcessor:
                 log_level="warning" 
             )
             server = Server(config)
-            self._admin_server = server
+            self._api_server = server
             
             # Disable signal handlers as we manage them
             server.install_signal_handlers = lambda: None # type: ignore
             
-            logger.info(f"Starting Admin API on port {settings.telemetry.ADMIN_PORT}")
+            logger.info(f"Starting Cluster API on port {settings.telemetry.ADMIN_PORT}")
             await server.serve()
         except Exception as e:
-            logger.error(f"Failed to start Admin API: {e}")
+            logger.error(f"Failed to start Cluster API: {e}")
 
     async def _monitor_metrics(self, interval: float = 10.0) -> None:
         """

@@ -49,9 +49,13 @@ async def main() -> None:
     # Clean up
     task.cancel()
     try:
+        await stream.stop()
         await task
     except asyncio.CancelledError:
         pass
     
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

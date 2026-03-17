@@ -23,7 +23,7 @@ HOST = os.getenv("HOST", "localhost")
 
 async def run():
     # 1. Setup Backend (Source) - Just a dummy memory backend for driving the loop
-    backend = MemoryBackend(stream_key="ha_source", group=f"ha_group_{NODE_ID}")
+    backend = MemoryBackend(stream_key="ha_source", group_name=f"ha_group_{NODE_ID}")
     
     # 2. Setup HA Components
     coordinator = ClusterCoordinator(

@@ -127,7 +127,65 @@ python producer.py
 ### Results
 You will see orders appearing in the Consumer window as they are emitted by the Producer.
 
+---
+
+## Alternative: Testing Locally with MemoryBackend
+
+If you don't have Valkey or Redis running or just want to quickly test the application logic entirely in memory, you can swap the backend in a single file approach.
+
+Create a file named `memory_tutorial.py`:
+
+```python
+import asyncio
+import uuid
+from pspf import Stream
+from pspf.connectors.memory import MemoryBackend
+from schema import OrderCreated
+
+async def main():
+    # 1. Use the MemoryBackend instead of Valkey
+    backend = MemoryBackend(stream_key="orders", group_name="local-test-group")
+    stream = Stream(backend=backend)
+
+    # 2. Register the Handler
+    @stream.subscribe("orders", schema=OrderCreated)
+    async def process_order(event: OrderCreated):
+        print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
+        await asyncio.sleep(0.5) 
+        print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
+
+    # 3. Start the Stream Processing Loop in the background
+    print("🚀 Fulfillment Service Started (In-Memory)...")
+    task = asyncio.create_task(stream.run_forever())
+
+    # 4. Produce events in the same script
+    print("📤 Sending orders...")
+    for i in range(3):
+        order = OrderCreated(
+            order_id=str(uuid.uuid4())[:8],
+            user_id=f"user-{i}",
+            sku="WIDGET-TEST",
+            quantity=2,
+            amount=19.99
+        )
+        msg_id = await stream.emit(order)
+        print(f"   -> Sent {order.order_id} (ID: {msg_id})")
+        await asyncio.sleep(1)
+
+    # Clean up
+    await stream.stop()
+    await task
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run it with a single command:
+```bash
+python memory_tutorial.py
+```
+
 ## Next Steps
-1. **Scale**: Run multiple `consumer.py` instances with different `consumer_name` values to see automatic load balancing.
-2. **Recover**: Stop a consumer mid-process and restart it; PSPF will recover the "in-flight" message automatically.
+1. **Scale**: Run multiple `consumer.py` instances with different `consumer_name` values to see automatic load balancing (Requires Valkey backend).
+2. **Recover**: Stop a consumer mid-process and restart it; PSPF will recover the "in-flight" message automatically (Requires persistent backend).
 3. **Functional DSL**: For complex transformations, try the `StreamBuilder` API to chain `map` and `filter` operations.

@@ -21,10 +21,14 @@ class ValkeyClusterCoordinator(IClusterCoordinator):
         self.valkey_url = valkey_url
         self.host = host
         self.port = port
-        self.node_id = node_id or str(uuid.uuid4())
+        self._node_id = node_id or str(uuid.uuid4())
         self._running = False
         self._client: Optional[valkey.Redis] = None
         self._held_partitions: List[str] = []
+        
+    @property
+    def node_id(self) -> str:
+        return self._node_id
         
     async def start(self) -> None:
         self._client = valkey.from_url(self.valkey_url, decode_responses=True)
