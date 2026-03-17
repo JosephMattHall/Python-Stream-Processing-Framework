@@ -130,3 +130,4 @@ You will see orders appearing in the Consumer window as they are emitted by the 
 ## Next Steps
 1. **Scale**: Run multiple `consumer.py` instances with different `consumer_name` values to see automatic load balancing.
 2. **Recover**: Stop a consumer mid-process and restart it; PSPF will recover the "in-flight" message automatically.
+3. **Functional DSL**: For complex transformations, try the `StreamBuilder` API to chain `map` and `filter` operations.

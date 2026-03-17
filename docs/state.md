@@ -24,6 +24,25 @@ async def process_word(msg_id, data, ctx: Context):
     
     # 2. Update state
     await ctx.state.put(word, current_count + 1)
+
+## Windowing Strategies
+
+PSPF provides built-in support for windowed aggregations:
+
+- **Tumbling Windows**: Fixed-size, non-overlapping intervals (e.g., every 5 minutes).
+- **Sliding Windows**: Overlapping intervals (e.g., 5-minute window sliding every 1 minute).
+- **Session Windows**: Dynamic windows defined by activity gaps.
+    - **Stateful Merging**: Unlike fixed windows, sessions grow as new events arrive. If an event arrives within the configured `gap_ms`, it is merged into the current session.
+
+```python
+from pspf.processing.windows import SessionWindow
+
+# Define a session with a 10-second inactivity gap
+@stream.window("user_activity", SessionWindow(gap_ms=10000))
+async def track_session(event, current_state):
+    # Logic to aggregate session data
+    return (current_state or 0) + 1
+```
 ```
 
 ## Configuring the Processor
@@ -46,11 +65,15 @@ PSPF allows you to query the state stores of live workers using a built-in REST 
 ### 1. Enable the Admin API
 The Admin API is enabled by default in the `BatchProcessor`. You can configure the port via the `admin_port` setting.
 
-### 2. Querying State
-You can fetch any key from the local state store:
+### 2. Distributed Query Routing
+The Admin API is transparently distributed. If you query a key that is managed by a different node in the cluster, the Admin API will:
+1. Resolve the leader node for that key via the `ClusterCoordinator`.
+2. Proxy the request to that node.
+3. Return the merged result to you.
 
 ```bash
-curl http://localhost:8000/state/user_id_123
+# Query any node; it will route to the owner automatically
+curl http://any-worker:8001/state/user_id_123
 ```
 
 **Response:**
