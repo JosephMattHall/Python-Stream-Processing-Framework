@@ -1,6 +1,5 @@
 import aiosqlite
-import pickle
-import pickle
+import json
 import os
 from typing import Any, Optional, Dict, AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,10 +8,41 @@ from pspf.utils.logging import get_logger
 
 logger = get_logger("SQLiteStateStore")
 
+try:
+    import msgpack
+    HAS_MSGPACK = True
+except ImportError:
+    HAS_MSGPACK = False
+
+def serialize_state(value: Any) -> bytes:
+    """Serializes state using msgpack if available, otherwise json."""
+    if HAS_MSGPACK:
+        try:
+            return msgpack.packb(value, use_bin_type=True)
+        except Exception as e:
+            logger.warning(f"msgpack serialization failed: {e}. Falling back to JSON.")
+    
+    # Fallback or if msgpack not available
+    return json.dumps(value).encode("utf-8")
+
+def deserialize_state(data: bytes, key: str, default: Any) -> Any:
+    """Deserializes state, attempting msgpack first, then json."""
+    if HAS_MSGPACK:
+        try:
+            return msgpack.unpackb(data, raw=False)
+        except Exception:
+            pass # Fallthrough to JSON
+            
+    try:
+        return json.loads(data.decode("utf-8"))
+    except Exception as e:
+        logger.error(f"CORRUPTION DETECTED: Failed to deserialize value for key '{key}': {e}")
+        return default
+
 class SQLiteStateStore(StateStore):
     """
     Persistent state store using SQLite.
-    Values are pickled before storage.
+    Values are stored via msgpack (preferred) or json.
     """
     def __init__(self, path: str, table_name: str = "kv_store") -> None:
         self.path = path
@@ -68,17 +98,13 @@ class SQLiteStateStore(StateStore):
         async with self._db.execute(f"SELECT value FROM {self.table_name} WHERE key = ?", (key,)) as cursor:
             row = await cursor.fetchone()
             if row:
-                try:
-                    return pickle.loads(row[0])
-                except (pickle.UnpicklingError, AttributeError, EOFError, ImportError, IndexError) as e:
-                    logger.error(f"CORRUPTION DETECTED: Failed to unpickle value for key '{key}': {e}")
-                    return default
+                return deserialize_state(row[0], key, default)
             return default
 
-    async def put(self, key: str, value: Any) -> None:
+    async def put(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
         if not self._db: raise RuntimeError("Store not started")
         
-        data = pickle.dumps(value)
+        data = serialize_state(value)
         await self._db.execute(
             f"INSERT OR REPLACE INTO {self.table_name} (key, value) VALUES (?, ?)",
             (key, data)
@@ -92,7 +118,7 @@ class SQLiteStateStore(StateStore):
         # Prepare data
         rows = []
         for k, v in entries.items():
-            rows.append((k, pickle.dumps(v)))
+            rows.append((k, serialize_state(v)))
             
         if not rows: return
 

@@ -1,4 +1,3 @@
-import pickle
 import json
 import os
 import asyncio
@@ -9,10 +8,41 @@ from pspf.utils.logging import get_logger
 
 logger = get_logger("RocksDBStateStore")
 
+try:
+    import msgpack
+    HAS_MSGPACK = True
+except ImportError:
+    HAS_MSGPACK = False
+
+def serialize_state(value: Any) -> bytes:
+    """Serializes state using msgpack if available, otherwise json."""
+    if HAS_MSGPACK:
+        try:
+            return msgpack.packb(value, use_bin_type=True)
+        except Exception as e:
+            logger.warning(f"msgpack serialization failed: {e}. Falling back to JSON.")
+    
+    # Fallback or if msgpack not available
+    return json.dumps(value).encode("utf-8")
+
+def deserialize_state(data: bytes, key: str, default: Any) -> Any:
+    """Deserializes state, attempting msgpack first, then json."""
+    if HAS_MSGPACK:
+        try:
+            return msgpack.unpackb(data, raw=False)
+        except Exception:
+            pass # Fallthrough to JSON
+            
+    try:
+        return json.loads(data.decode("utf-8"))
+    except Exception as e:
+        logger.error(f"CORRUPTION DETECTED: Failed to deserialize value for key '{key}': {e}")
+        return default
+
 class RocksDBStateStore(StateStore):
     """
     Persistent state store using RocksDB.
-    Values are pickled before storage.
+    Values are stored via msgpack (preferred) or json.
     Operations are wrapped in a thread pool to avoid blocking the event loop.
     """
     def __init__(self, path: str, read_only: bool = False, options: Optional[Dict[str, Any]] = None):
@@ -69,23 +99,14 @@ class RocksDBStateStore(StateStore):
         val = await loop.run_in_executor(self._executor, lambda: self._db.get(key.encode()))
         
         if val is not None:
-            try:
-                # Try JSON first (for cross-language compatibility)
-                try:
-                    obj = json.loads(val.decode())
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    # Fallback to pickle for legacy data
-                    obj = pickle.loads(val)
-                
-                if isinstance(obj, dict) and "_v" in obj and "_exp" in obj:
-                    if obj["_exp"] is not None and time.time() > obj["_exp"]:
-                        await self.delete(key) # Lazy eviction
-                        return default
-                    return obj["_v"]
-                return obj # Backwards compatibility
-            except Exception as e:
-                logger.error(f"Failed to deserialize key '{key}': {e}")
-                return default
+            obj = deserialize_state(val, key, default)
+            
+            if isinstance(obj, dict) and "_v" in obj and "_exp" in obj:
+                if obj["_exp"] is not None and time.time() > obj["_exp"]:
+                    await self.delete(key) # Lazy eviction
+                    return default
+                return obj["_v"]
+            return obj # Backwards compatibility
         return default
 
     async def put(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
@@ -94,7 +115,7 @@ class RocksDBStateStore(StateStore):
         
         expires_at = time.time() + ttl_seconds if ttl_seconds is not None else None
         wrapped = {"_v": value, "_exp": expires_at}
-        data = json.dumps(wrapped).encode()
+        data = serialize_state(wrapped)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, lambda: self._db.put(key.encode(), data))
 
@@ -105,7 +126,7 @@ class RocksDBStateStore(StateStore):
         def _batch() -> None:
             batch = rocksdb.WriteBatch()
             for k, v in entries.items():
-                data = json.dumps(v).encode()
+                data = serialize_state(v)
                 batch.put(k.encode(), data)
             self._db.write(batch)
             
