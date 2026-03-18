@@ -32,14 +32,14 @@ pspfctl status --url http://localhost:8001
 # Output: ✅ Worker Online: {'status': 'ok', 'worker_state': 'running'}
 ```
 
-#### Pause Processing
-Pauses the consumer loop. The process remains alive but stops pulling new messages.
+#### Inspecting DLQs
+View events that have been routed to a Dead Letter Queue due to processing errors or being too late.
 ```bash
-pspfctl pause --url http://localhost:8001
+pspfctl dlq-inspect orders --limit 5
 ```
 
-#### Resume Processing
-Resumes the consumer loop efficiently.
+#### Purging DLQs
+Delete all messages from a stream's Dead Letter Queue to clear it.
 ```bash
-pspfctl resume --url http://localhost:8001
+pspfctl dlq-purge orders
 ```

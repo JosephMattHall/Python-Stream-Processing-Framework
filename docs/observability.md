@@ -13,7 +13,7 @@ Every PSPF worker automatically exposes a **Prometheus** metrics endpoint on por
 | `stream_messages_processed_total` | Counter | Total number of messages processed, labeled by `stream` and `status` (success/error/skipped). |
 | `stream_processing_seconds` | Histogram | Latency distribution of message processing time. |
 | `stream_lag` | Gauge | **Consumer Lag**: The number of pending messages waiting to be processed in the consumer group. |
-| `pspf_worker_status` | Gauge | **Worker Status**: `1` if the worker is running, `0` if it is stopped or paused. |
+| `pspf_worker_status` | Gauge | **Worker Status**: `1` if the worker is running, `0` if it is stopped. |
 
 ### Accessing Metrics
 You can scrape these metrics using any Prometheus-compatible scraper at:
@@ -27,10 +27,6 @@ PSPF includes a lightweight HTTP Admin API for managing worker state. By default
 
 *   **GET /health**: Returns the health status of the worker.
     *   Response: `{"status": "ok", "worker_state": "running"}`
-*   **POST /control/pause**: Pauses message consumption. The worker will stop fetching new messages but keep the process alive.
-    *   Response: `{"status": "paused"}`
-*   **POST /control/resume**: Resumes message consumption.
-    *   Response: `{"status": "resumed"}`
 
 ### Configuration
 You can configure the ports using environment variables in your `settings.py` or `.env` file:

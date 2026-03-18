@@ -37,30 +37,21 @@ Create a file named `consumer.py`:
 ```python
 # consumer.py
 import asyncio
-from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
+from pspf import Stream
 from schema import OrderCreated
 
 async def main():
-    # 1. Configure the Connector
-    connector = ValkeyConnector(host='localhost', port=6379)
-    
-    # 2. Setup the Stream Backend
-    backend = ValkeyStreamBackend(
-        connector, 
-        stream_key="orders", 
-        group_name="fulfillment-service", 
-        consumer_name="worker-1"
-    )
-    
-    # 3. Define the Stream
-    stream = Stream(backend=backend)
+    # 1. Define the Stream
+    # (PSPF will automatically connect to Valkey since it's the default)
+    stream = Stream(topic="orders", group="fulfillment-service")
 
-    # 4. Register the Handler
+    # 2. Register the Handler
     @stream.subscribe("orders", schema=OrderCreated)
     async def process_order(event: OrderCreated):
         print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
         await asyncio.sleep(0.5) 
         print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
+
 
     # 5. Start the Stream Processing Loop
     print("🚀 Fulfillment Service Started...")
@@ -84,15 +75,11 @@ Create a file named `producer.py`:
 # producer.py
 import asyncio
 import uuid
-from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
+from pspf import Stream
 from schema import OrderCreated
 
 async def main():
-    connector = ValkeyConnector(host='localhost', port=6379)
-    # Producers use the same backend but typically don't need unique consumer names
-    backend = ValkeyStreamBackend(connector, "orders", "producer-group", "producer")
-
-    async with Stream(backend, schema=OrderCreated) as stream:
+    async with Stream(topic="orders", group="producer-group", schema=OrderCreated) as stream:
         print("📤 Sending orders...")
         for i in range(5):
             order = OrderCreated(
@@ -143,7 +130,7 @@ from pspf.connectors.memory import MemoryBackend
 from schema import OrderCreated
 
 async def main():
-    # 1. Use the MemoryBackend instead of Valkey
+    # 1. Use the MemoryBackend explicitly
     backend = MemoryBackend(stream_key="orders", group_name="local-test-group")
     stream = Stream(backend=backend)
 

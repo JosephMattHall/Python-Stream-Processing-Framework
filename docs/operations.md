@@ -26,7 +26,7 @@ groups:
       summary: "High lag on {{ $labels.stream }} (Group: {{ $labels.group }})"
       description: "Consumer group is falling behind by {{ $value }} messages."
 
-  # 2. Worker Down/Paused
+  # 2. Worker Down
   # Critical: If worker claims to be running but status is 0
   - alert: WorkerStopped
     expr: pspf_worker_status == 0
@@ -34,7 +34,7 @@ groups:
     labels:
       severity: critical
     annotations:
-      summary: "Worker instance is stopped or paused"
+      summary: "Worker instance is stopped"
   
   # 3. High Error Rate
   # Warning: If > 5% of processed messages range in errors

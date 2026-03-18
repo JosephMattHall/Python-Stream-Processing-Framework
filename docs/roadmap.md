@@ -7,7 +7,7 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 ## Phase 1: Security & Persistence (Hardening)
 **Objective**: Eliminate high-risk dependencies and ensure crash-resilience for all connectors.
 
-- **[ ] Serialization Migration**:
+- **[x] Serialization Migration**:
     - Replace `pickle` with **Msgpack** as the default binary format in SQLite and RocksDB backends.
     - Implement a "Safe JSON" fallback for human-readable state inspection.
 - **[ ] Durable Retry Tracking**:
@@ -37,7 +37,7 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 - **[ ] Optimized Cluster Rebalancing**:
     - Extract rebalancing logic from the 3s heartbeat loop into a membership-triggered `StateSync` event.
     - Reduce Valkey/Redis overhead by 40% in large clusters.
-- **[ ] Native CLI Tooling**:
+- **[x] Native CLI Tooling**:
     - Implement `pspf-cli` for live stream tailing, manual DLO reprocessing, and state inspection via the Admin API.
 
 ---
@@ -45,4 +45,4 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 ## Evaluation Metrics
 - **Data Loss Rate**: Zero (Verified via Chaos testing).
 - **Startup Time**: < 1s (Delayed Admin start).
-- **Security Compliance**: No `pickle` usage in production paths.
+- **Security Compliance**: No `pickle` usage in production paths (Completed).

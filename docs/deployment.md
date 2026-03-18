@@ -66,13 +66,10 @@ To use PSPF in your own projects:
     ```
 2.  **Import**:
     ```python
-    from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
+    from pspf import Stream
     
-    # 1. Setup Backend
-    backend = ValkeyStreamBackend(ValkeyConnector(), "topic", "group")
-    
-    # 2. Build your Stream
-    stream = Stream(backend=backend)
+    # 1. Build your Stream auto-instantiating Valkey
+    stream = Stream(topic="topic", group="group")
     
     @stream.subscribe("topic")
     async def handler(event):

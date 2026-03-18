@@ -18,12 +18,9 @@ class UserSignup(BaseEvent):
     user_id: str
     email: str
 
-# 2. Configure Backend
-connector = ValkeyConnector(host="localhost", port=6379)
-backend = ValkeyStreamBackend(connector, stream_key="signups", group_name="signup-workers")
-
-# 3. Define Stream and Handlers
-stream = Stream(backend=backend)
+# 2. Define Stream and Handlers
+# (PSPF auto-connects to Valkey or falls back to Memory Backend)
+stream = Stream(topic="signups", group="signup-workers")
 
 @stream.subscribe("signups", schema=UserSignup)
 async def handle_signup(event: UserSignup):
@@ -38,10 +35,11 @@ async def main():
         await stream.run_forever()
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
 ```
 
-> **Note**: While the example above uses `ValkeyConnector`, PSPF is backend-agnostic! You can swap it out with `KafkaConnector`, `MemoryBackend` (for testing), or the native `File` backend.
+> **Note**: While PSPF defaults to Valkey via auto-instantiation, it is completely backend-agnostic! You can explicitly swap it out with `KafkaConnector` or `MemoryBackend` by passing a custom `backend` to the `Stream`.
 
 ## Key Features
 - **Backend-Agnostic**: Run on Valkey, Kafka, Memory, or local Files.
