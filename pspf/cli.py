@@ -69,30 +69,6 @@ def status(url: str = typer.Option("http://localhost:8001", help="URL of the Adm
     except httpx.RequestError as e:
         typer.echo(f"❌ Failed to connect to {url}: {e}")
 
-@app.command()
-def pause(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
-    """
-    Pauses the worker's message consumption.
-    """
-    _send_control(url, "pause")
-
-@app.command()
-def resume(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
-    """
-    Resumes the worker's message consumption.
-    """
-    _send_control(url, "resume")
-
-def _send_control(base_url: str, action: str) -> None:
-    url = f"{base_url}/control/{action}"
-    try:
-        r = httpx.post(url)
-        if r.status_code == 200:
-            typer.echo(f"✅ Command '{action}' sent successfully.")
-        else:
-            typer.echo(f"⚠️  Failed to {action}: {r.status_code} {r.text}")
-    except httpx.RequestError as e:
-        typer.echo(f"❌ Connection error: {e}")
 
 @app.command("cluster-status")
 def cluster_status(url: str = typer.Option("http://localhost:8001", help="URL of the Admin API")) -> None:
@@ -201,6 +177,55 @@ def replay(
                 typer.echo(f"❌ Replay failed: {e}")
 
     asyncio.run(_replay())
+
+@app.command("dlq-inspect")
+def dlq_inspect(
+    stream: str = typer.Argument(..., help="Source stream (e.g. 'orders')"),
+    limit: int = typer.Option(10, help="Max messages to view")
+) -> None:
+    """Inspects messages currently sitting in the Dead Letter Queue."""
+    dlq_stream = f"{stream}-dlq"
+    
+    async def _inspect() -> None:
+        connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
+        async with connector:
+            client = connector.get_client()
+            try:
+                messages = await client.xrange(dlq_stream, min="-", max="+", count=limit)
+                if not messages:
+                    typer.echo(f"No messages found in DLQ '{dlq_stream}'.")
+                    return
+                
+                typer.echo(f"--- DLQ Messages for '{stream}' (Limit {limit}) ---")
+                for msg_id, data in messages:
+                    typer.echo(f"ID: {msg_id}")
+                    for k, v in data.items():
+                        typer.echo(f"  {k}: {v}")
+                    typer.echo("-" * 40)
+            except Exception as e:
+                typer.echo(f"❌ Failed to inspect DLQ: {e}")
+
+    asyncio.run(_inspect())
+
+@app.command("dlq-purge")
+def dlq_purge(
+    stream: str = typer.Argument(..., help="Source stream (e.g. 'orders')")
+) -> None:
+    """Purges all messages from the Dead Letter Queue."""
+    dlq_stream = f"{stream}-dlq"
+    
+    async def _purge() -> None:
+        connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
+        async with connector:
+            client = connector.get_client()
+            try:
+                # Delete the key to clear the DLQ completely
+                await client.delete(dlq_stream)
+                typer.echo(f"✅ Successfully purged DLQ '{dlq_stream}'.")
+            except Exception as e:
+                typer.echo(f"❌ Failed to purge DLQ: {e}")
+
+    asyncio.run(_purge())
 
 if __name__ == "__main__":
     app()

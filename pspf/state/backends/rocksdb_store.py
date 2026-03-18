@@ -52,6 +52,7 @@ class RocksDBStateStore(StateStore):
         self._db: Any = None
         self._executor = ThreadPoolExecutor(max_workers=1) # Sequential access for safety
         self._checkpoint_prefix = b"__pspf_offset__:"
+        self._gc_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
         try:
@@ -84,8 +85,54 @@ class RocksDBStateStore(StateStore):
             
         self._db = await loop.run_in_executor(self._executor, _open)
         logger.info(f"Opened RocksDB State Store at {self.path}")
+        
+        if not self.read_only:
+            self._gc_task = asyncio.create_task(self._gc_loop())
+
+    async def _gc_loop(self) -> None:
+        import time
+        import rocksdb
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                await asyncio.sleep(60)
+                if not self._db:
+                    break
+                    
+                def _do_gc() -> None:
+                    it = self._db.iteritems()
+                    it.seek_to_first()
+                    now = time.time()
+                    batch = rocksdb.WriteBatch()
+                    count = 0
+                    for key, val in it:
+                        if key.startswith(self._checkpoint_prefix):
+                            continue
+                            
+                        obj = deserialize_state(val, key.decode(errors='ignore'), None)
+                        if isinstance(obj, dict) and "_v" in obj and "_exp" in obj:
+                            if obj["_exp"] is not None and now > obj["_exp"]:
+                                batch.delete(key)
+                                count += 1
+                                
+                    if count > 0:
+                        self._db.write(batch)
+                        logger.debug(f"GC evicted {count} expired keys")
+
+                await loop.run_in_executor(self._executor, _do_gc)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"GC loop error: {e}")
 
     async def stop(self) -> None:
+        if self._gc_task:
+            self._gc_task.cancel()
+            try:
+                await self._gc_task
+            except asyncio.CancelledError:
+                pass
+                
         if self._db:
             self._db = None
             self._executor.shutdown()

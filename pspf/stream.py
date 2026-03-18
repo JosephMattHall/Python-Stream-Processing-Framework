@@ -28,22 +28,43 @@ class Stream(Generic[T]):
         telemetry (TelemetryManager): Observability manager.
     """
     def __init__(self, 
-                 backend: StreamingBackend,
+                 backend: Optional[StreamingBackend] = None,
+                 topic: Optional[str] = None,
+                 group: Optional[str] = None,
                  schema: Optional[Type[T]] = None,
                  state_store: Optional[StateStore] = None):
         """
         Initialize the Stream facade.
 
         Args:
-            backend (ValkeyStreamBackend): Configured backend instance.
+            backend (Optional[StreamingBackend]): Configured backend instance.
+            topic (Optional[str]): Stream topic (required if backend is None).
+            group (Optional[str]): Consumer group (required if backend is None).
             schema (Optional[Type[T]]): Pydantic model class for validation. 
                                         If None, uses dynamic SchemaRegistry.
             state_store (Optional[StateStore]): Key-Value store for persistent state.
         """
+        if backend is None:
+            if not topic or not group:
+                raise ValueError("Must provide either a 'backend', or both 'topic' and 'group' for auto-instantiation.")
+            
+            from pspf.settings import settings
+            try:
+                from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
+                import uuid
+                connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
+                worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+                backend = ValkeyStreamBackend(connector, topic, group, worker_id)
+                logger.info(f"Auto-instantiated Valkey backend for topic '{topic}'")
+            except Exception as e:
+                logger.warning(f"Failed to auto-instantiate Valkey backend: {e}. Falling back to MemoryBackend.")
+                from pspf.connectors.memory import MemoryBackend
+                backend = MemoryBackend(stream_key=topic, group_name=group)
+
         self.backend = backend
         self.schema = schema
         self.state_store = state_store
-        self.processor = BatchProcessor(backend)
+        self.processor = BatchProcessor(self.backend)
         self.telemetry = TelemetryManager()
         self._subscriptions: List[Dict[str, Any]] = []
         self._processors: List[BatchProcessor] = []
@@ -346,6 +367,14 @@ class Stream(Generic[T]):
             for start, end in windows:
                 if watermark_delay_ms > 0 and end < current_watermark:
                     logger.warning(f"Dropping late event {msg_id}. Window {end} is older than Watermark {current_watermark:.2f}")
+                    # Route to late-events DLQ
+                    late_topic = f"{topic}-late"
+                    try:
+                        late_backend = backend.clone_with_topic(late_topic)
+                        await late_backend.add_event(raw_data)
+                        logger.debug(f"Late event {msg_id} routed to DLQ {late_topic}")
+                    except Exception as e:
+                        logger.error(f"Failed to route late event to DLQ: {e}")
                     continue
                 
                 # Dynamic Logic for Sessions vs Fixed Windows

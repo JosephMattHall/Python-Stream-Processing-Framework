@@ -68,11 +68,12 @@ class Joiner:
         for start, end in windows:
             state_key = f"join:{side}:{key}:{start}:{end}"
             
-            # Fetch existing buffered events for this window
-            current_buffer = await self.state_store.get(state_key) or []
-            current_buffer.append(event.model_dump(mode='json'))
-            
-            await self.state_store.put(state_key, current_buffer)
+            async with self.state_store.transaction():
+                # Fetch existing buffered events for this window
+                current_buffer = await self.state_store.get(state_key) or []
+                current_buffer.append(event.model_dump(mode='json'))
+                
+                await self.state_store.put(state_key, current_buffer)
 
     async def get_buffered_events(self, side: str, key: str, timestamp: float, window: Window) -> List[Dict[str, Any]]:
         """

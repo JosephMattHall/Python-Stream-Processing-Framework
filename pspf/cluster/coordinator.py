@@ -86,11 +86,25 @@ class ValkeyClusterCoordinator(IClusterCoordinator):
                         
                 # 3. Simple Rebalancing Check
                 try:
-                    cursor, node_keys = await self._client.scan(0, match="pspf:nodes:*")
+                    cursor = 0
+                    node_keys = []
+                    while True:
+                        cursor, keys = await self._client.scan(cursor, match="pspf:nodes:*")
+                        node_keys.extend(keys)
+                        if cursor == 0 or cursor == b'0' or cursor == "0":
+                            break
+                            
                     all_nodes_count = len(node_keys)
                     if all_nodes_count > 1 and self._held_partitions:
                         # We count known partition leader keys to estimate total active partitions
-                        cursor, part_keys = await self._client.scan(0, match="pspf:partition:*:leader")
+                        cursor = 0
+                        part_keys = []
+                        while True:
+                            cursor, keys = await self._client.scan(cursor, match="pspf:partition:*:leader")
+                            part_keys.extend(keys)
+                            if cursor == 0 or cursor == b'0' or cursor == "0":
+                                break
+                                
                         total_parts = len(part_keys) 
                         
                         # Add 1 to handle uneven remainders safely
