@@ -64,6 +64,11 @@ class Stream(Generic[T]):
         self.backend = backend
         self.schema = schema
         self.state_store = state_store
+        
+        # Inject state_store into backend if it supports it
+        if hasattr(self.backend, "state_store"):
+            self.backend.state_store = state_store
+
         self.processor = BatchProcessor(self.backend)
         self.telemetry = TelemetryManager()
         self._subscriptions: List[Dict[str, Any]] = []

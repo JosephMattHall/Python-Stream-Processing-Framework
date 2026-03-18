@@ -10,7 +10,7 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 - **[x] Serialization Migration**:
     - Replace `pickle` with **Msgpack** as the default binary format in SQLite and RocksDB backends.
     - Implement a "Safe JSON" fallback for human-readable state inspection.
-- **[ ] Durable Retry Tracking**:
+- **[x] Durable Retry Tracking**:
     - Refactor `KafkaStreamBackend` to store retry counters in the `StateStore` instead of in-memory.
     - Ensure message retry state survives worker restarts.
 - **[ ] Idempotent Sinks**:

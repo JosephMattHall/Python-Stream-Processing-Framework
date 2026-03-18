@@ -12,6 +12,7 @@ except ImportError:
     KAFKA_AVAILABLE = False
     
 from pspf.connectors.base import StreamingBackend
+from pspf.state.store import StateStore
 from pspf.utils.logging import get_logger
 
 logger = get_logger("KafkaBackend")
@@ -21,7 +22,7 @@ class KafkaStreamBackend(StreamingBackend):
     Kafka (or Redpanda) implementation of StreamingBackend.
     Requires `aiokafka` package.
     """
-    def __init__(self, bootstrap_servers: str, topic: str, group_id: str, client_id: str) -> None:
+    def __init__(self, bootstrap_servers: str, topic: str, group_id: str, client_id: str, state_store: Optional[StateStore] = None) -> None:
         if not KAFKA_AVAILABLE:
             raise ImportError("aiokafka is required for KafkaStreamBackend. Install it with `pip install aiokafka`.")
             
@@ -29,6 +30,8 @@ class KafkaStreamBackend(StreamingBackend):
         self.topic = topic
         self.group_id = group_id
         self.client_id = client_id
+        self.state_store = state_store
+        self.retry_tracker_prefix = f"pspf:retries:{group_id}:{topic}:"
         
         self.consumer: Optional[AIOKafkaConsumer] = None
         self.producer: Optional[AIOKafkaProducer] = None
@@ -41,6 +44,16 @@ class KafkaStreamBackend(StreamingBackend):
     @property
     def group_name(self) -> str:
         return self.group_id
+
+    def clone_with_topic(self, topic: str) -> "KafkaStreamBackend":
+        """Create a new backend instance for a different topic, sharing the underlying connection."""
+        return KafkaStreamBackend(
+            bootstrap_servers=self.bootstrap_servers,
+            topic=topic,
+            group_id=self.group_id,
+            client_id=self.client_id,
+            state_store=self.state_store
+        )
 
     async def connect(self) -> None:
         try:
@@ -169,6 +182,12 @@ class KafkaStreamBackend(StreamingBackend):
         
         if offsets_to_commit:
             await self.consumer.commit(offsets_to_commit) # type: ignore
+            
+            # Durable Retry Cleanup
+            if self.state_store:
+                for msg_id in message_ids:
+                    retry_key = f"{self.retry_tracker_prefix}{msg_id}"
+                    await self.state_store.delete(retry_key)
 
     async def claim_stuck_messages(self, min_idle_time_ms: int = 60000, count: int = 10) -> List[Tuple[str, Dict[str, Any]]]:
         # Kafka doesn't have PEL claiming mechanim like Redis Streams.
@@ -179,9 +198,15 @@ class KafkaStreamBackend(StreamingBackend):
     async def increment_retry_count(self, message_id: str) -> int:
         """
         Increment and return the retry count for a message.
-        Currently uses an in-memory map as Kafka doesn't have native message metadata updates.
-        In production, this should ideally be backed by a StateStore.
+        If a StateStore is available, it persists the count.
         """
+        if self.state_store:
+            retry_key = f"{self.retry_tracker_prefix}{message_id}"
+            current_count = await self.state_store.get(retry_key, 0)
+            new_count = current_count + 1
+            await self.state_store.put(retry_key, new_count)
+            return new_count
+            
         if not hasattr(self, "_retry_counts"):
             self._retry_counts: Dict[str, int] = {}
         
@@ -196,6 +221,11 @@ class KafkaStreamBackend(StreamingBackend):
              data["_original_id"] = message_id
              payload = json.dumps(data).encode("utf-8")
              await self.producer.send_and_wait(dlq_topic, payload)
+
+             # Clear retry state
+             if self.state_store:
+                 retry_key = f"{self.retry_tracker_prefix}{message_id}"
+                 await self.state_store.delete(retry_key)
 
     async def get_pending_info(self) -> Dict[str, Any]:
         """
