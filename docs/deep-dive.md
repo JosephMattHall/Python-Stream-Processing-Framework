@@ -100,12 +100,19 @@ async def handle_greeting(event: GreetingEvent):
 
 # 3. Connect it all together
 async def main():
-    async with Stream(topic="greetings_stream", group="group1", schema=GreetingEvent) as stream:
+    # Auto-instantiates Valkey (fallback to Memory if Valkey is unavailable)
+    stream = Stream(topic="greetings_stream", group="group1", schema=GreetingEvent)
+
+    @stream.subscribe("greetings_stream")
+    async def handle_greeting(event: GreetingEvent):
+        print(f"Received Greeting: {event.message}")
+
+    async with stream:
         # Emit a message
         await stream.emit(GreetingEvent(message="Hello World!"))
         
         # Start consuming
-        await stream.run(handler=handle_greeting)
+        await stream.run_forever()
 
 if __name__ == "__main__":
     asyncio.run(main())

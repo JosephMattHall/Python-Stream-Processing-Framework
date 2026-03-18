@@ -8,15 +8,12 @@ from pspf.processing.windows import SessionWindow
 
 async def main():
     from pspf.settings import settings
-    from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
     
     # Disable telemetry to avoid port conflicts in Docker
     settings.telemetry.ENABLED = False
     
-    connector = ValkeyConnector(settings.valkey.HOST, settings.valkey.PORT)
-    await connector.connect()
-    backend = ValkeyStreamBackend(connector, "dsl_demo", "dsl_group", "dsl_consumer")
-    stream = Stream(backend)
+    # Use auto-instantiation (Valkey with Memory fallback)
+    stream = Stream(topic="dsl_demo", group="dsl_group")
     
     # Use the new Functional DSL
     builder = StreamBuilder(stream)
@@ -25,12 +22,11 @@ async def main():
     builder.map(lambda x: {**x, "processed_at": time.time()}) \
            .filter(lambda x: x.get("value", 0) > 5) \
            .map(lambda x: {"message": f"High Value Event: {x}"}) \
-           .sink(Stream(ValkeyStreamBackend(connector, "dsl_output", "dsl_output_group", "dsl_output_consumer")))
+           .sink(Stream(topic="dsl_output", group="dsl_output_group"))
 
     print("Subscribed to dsl_demo with Functional DSL.")
     print("Producing some test data...")
     
-    await backend.connect()
     for i in range(10):
         await stream.emit({"value": i})
     

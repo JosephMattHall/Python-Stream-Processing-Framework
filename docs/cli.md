@@ -32,14 +32,31 @@ pspfctl status --url http://localhost:8001
 # Output: ✅ Worker Online: {'status': 'ok', 'worker_state': 'running'}
 ```
 
-#### Inspecting DLQs
-View events that have been routed to a Dead Letter Queue due to processing errors or being too late.
+#### Cluster Status
+View the global cluster topology and partition assignments.
 ```bash
-pspfctl dlq-inspect orders --limit 5
+pspfctl cluster-status
 ```
 
-#### Purging DLQs
-Delete all messages from a stream's Dead Letter Queue to clear it.
+#### Consumer Group Management
+List groups or reset offsets for a specific stream.
 ```bash
+# List all groups for a stream
+pspfctl groups orders
+
+# Reset a group's offset to the beginning (0) or end ($)
+pspfctl reset orders my-group 0
+```
+
+#### Managing DLQs
+Inspect, purge, or replay messages from a Dead Letter Queue.
+```bash
+# View last 5 messages in DLQ
+pspfctl dlq-inspect orders --limit 5
+
+# Replay messages back to the main stream
+pspfctl replay orders my-group --limit 100
+
+# Clear the DLQ
 pspfctl dlq-purge orders
 ```

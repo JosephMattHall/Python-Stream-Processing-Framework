@@ -6,7 +6,7 @@ PSPF supports **Stateful Stream Processing**, allowing your handlers to maintain
 
 State is managed via a `StateStore` interface. Currently supported backends:
 - **SQLite**: Local, file-based state (perfect for small-to-medium datasets).
-- **RocksDB**: High-performance, embedded Key-Value store (recommended for high-throughput stateful processing).
+- **RocksDB**: High-performance Key-Value store. Recommended for high-throughput state. Supports **TTL-based eviction** and background GC.
 - **In-Memory**: Fast, but state is lost on restart.
 
 ## Using State in Handlers
@@ -55,8 +55,21 @@ from pspf.processor import BatchProcessor
 
 store = SQLiteStateStore(path="data/state.db")
 processor = BatchProcessor(backend, state_store=store)
-# ...
+```python
+from pspf.state.backends.rocksdb_store import RocksDBStateStore
+
+# Configure RocksDB with custom TTL and performance options
+options = {
+    "block_cache_size": 64 * 1024 * 1024, # 64MB
+    "write_buffer_size": 32 * 1024 * 1024 # 32MB
+}
+store = RocksDBStateStore(path="data/rocks_state", options=options)
+
+# Keys can have a default TTL (in seconds)
+await store.put("my_key", {"data": "..."} , ttl_seconds=3600)
 ```
+
+RocksDB supports background Garbage Collection (GC) which runs every 60 seconds to evict expired keys.
 
 ## Interactive Queries (REST API)
 

@@ -4,9 +4,9 @@ from pspf.stream import Stream
 from pspf.connectors.memory import MemoryBackend
 
 async def main():
-    # 1. Create a MemoryBackend and a Stream
-    backend = MemoryBackend(stream_key="memory_topic", group_name="test_group")
-    stream = Stream(backend)
+    # 1. Create a Stream using topic and group.
+    # PSPF will auto-instantiate Valkey backend, or fallback to MemoryBackend if Valkey is unavailable.
+    stream = Stream(topic="memory_topic", group="test_group")
 
     # 2. Subscribe to the stream
     @stream.subscribe("memory_topic")

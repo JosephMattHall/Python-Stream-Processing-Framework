@@ -130,9 +130,8 @@ from pspf.connectors.memory import MemoryBackend
 from schema import OrderCreated
 
 async def main():
-    # 1. Use the MemoryBackend explicitly
-    backend = MemoryBackend(stream_key="orders", group_name="local-test-group")
-    stream = Stream(backend=backend)
+    # 1. Use the MemoryBackend via topic/group (auto-instantiates if Valkey is missing)
+    stream = Stream(topic="orders", group="local-test-group")
 
     # 2. Register the Handler
     @stream.subscribe("orders", schema=OrderCreated)
