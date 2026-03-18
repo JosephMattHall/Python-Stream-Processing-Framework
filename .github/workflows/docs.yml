@@ -5,6 +5,8 @@ on:
       - main
 permissions:
   contents: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,6 +26,10 @@ jobs:
           path: .cache
           restore-keys: |
             mkdocs-material-
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librocksdb-dev libsnappy-dev libz-dev libbz2-dev liblz4-dev libzstd-dev
       - name: Install dependencies
         run: |
           pip install poetry
@@ -31,4 +37,4 @@ jobs:
       - name: Create CNAME
         run: echo "docs.pspf.dev" > docs/CNAME
       - name: Deploy to GitHub Pages
-        run: poetry run mkdocs gh-deploy --force
+        run: poetry run mkdocs gh-deploy --force --verbose
