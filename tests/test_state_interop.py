@@ -66,7 +66,9 @@ async def test_processor_with_mocked_rocksdb():
     state.stop = AsyncMock()
     state.put = AsyncMock()
     state.get = AsyncMock(return_value="mocked")
+    state.get_checkpoint = AsyncMock(return_value=None)
     state.checkpoint = AsyncMock()
+
     
     processor = BatchProcessor(backend, state_store=state)
     

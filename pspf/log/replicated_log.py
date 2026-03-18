@@ -18,6 +18,66 @@ class ReplicatedLog(Log):
         self._coordinator = coordinator
         self._http_client = httpx.AsyncClient(timeout=2.0)
         self._admin_port = admin_port
+        self._running = False
+        self._sync_task: Optional[asyncio.Task] = None
+        self._stop_event = asyncio.Event()
+
+    async def start(self) -> None:
+        """Start the background sync loop for followers."""
+        self._running = True
+        self._sync_task = asyncio.create_task(self._sync_loop())
+        logger.info("ReplicatedLog sync loop started.")
+
+    async def stop(self) -> None:
+        """Stop the background sync loop."""
+        self._running = False
+        self._stop_event.set()
+        if self._sync_task:
+            self._sync_task.cancel()
+            try:
+                await self._sync_task
+            except asyncio.CancelledError:
+                pass
+        await self._http_client.aclose()
+        logger.info("ReplicatedLog sync loop stopped.")
+
+    async def _sync_loop(self) -> None:
+        """Continuously checks leadership and pulls from leader if follower."""
+        while self._running:
+            try:
+                for p in range(self.partitions()):
+                    is_leader = await self._coordinator.try_acquire_leadership(str(p))
+                    if not is_leader:
+                        # Follower mode: find leader and sync
+                        leader_node = await self._coordinator.get_leader_node(str(p))
+                        if leader_node:
+                            await self._pull_from_leader(p, leader_node)
+            except Exception as e:
+                logger.error(f"Error in replication sync loop: {e}")
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass # Continue loop
+
+    async def _pull_from_leader(self, partition: int, leader_node: Dict[str, Any]) -> None:
+        from pspf.models import StreamRecord
+        url = f"http://{leader_node['host']}:{leader_node['port']}/internal/pull/{partition}"
+        try:
+            # We need to know our high watermark (offset) to resume pulling
+            offset = await self.get_high_watermark(partition)
+            
+            resp = await self._http_client.get(f"{url}?offset={offset}")
+            resp.raise_for_status()
+            
+            records = resp.json()
+            if records:
+                logger.debug(f"Pulled {len(records)} records from leader {leader_node['id']} for partition {partition}")
+            for r_dict in records:
+                r = StreamRecord(**r_dict)
+                # Append locally (bypass replication check)
+                await self.append_follower(r)
+        except Exception as e:
+            logger.debug(f"Failed to pull from leader {leader_node['id']} for partition {partition}: {e}")
 
     def partitions(self) -> int:
         return self._local.partitions()

@@ -20,8 +20,8 @@ Leverages `aiokafka` to integrate with existing Kafka or Redpanda clusters. Usef
 
 ## File (LocalLog)
 The "Native Log" implementation. It stores events on disk in a binary MessagePack format with CRC32 checksums.
-> [!WARNING]
-> The high-level `Stream` facade wrapper for `LocalLog` is currently in **preview**.
+> [!NOTE]
+> The high-level `Stream` facade wrapper for `LocalLog` is now fully integrated with the `ClusterCoordinator` for high-availability replication.
 
 ## Memory (MemoryBackend)
 A volatile backend that stores everything in RAM. Ideal for unit tests and local verification without external dependencies.

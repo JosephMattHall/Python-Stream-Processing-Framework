@@ -1,101 +1,48 @@
-# PSPF Production Roadmap
+# PSPF Roadmap 2026: Hardening for Scale & Security
 
-**Vision**: Build PSPF into a lightweight, production-safe, embeddable stream processing framework for Python, optimized for small-to-medium systems and edge deployments.
-
-**Target Positioning**: "The SQLite of Stream Processing for Python"
-
-A hybrid of:
-- **Path A**: Lightweight Kafka-style system via networked backends (Valkey, Kafka).
-- **Path B**: Edge / Embedded Streaming Platform via local backends (File, Memory).
-
-## Guiding Principles
-
-- **Reliability before scale**
-- **Simple deployment over complex clustering**
-- **Backend-agnostic flexibility**
-- **First-class developer experience**
-- **Observable and debuggable by default**
-- **Suitable for embedded and on-prem use**
+This roadmap outlines the evolution of PSPF from a functional framework to an enterprise-hardened streaming platform.
 
 ---
 
-## Phase 1 — v0.1.0-alpha (Current)
-**Status**: Alpha Release
+## Phase 1: Security & Persistence (Hardening)
+**Objective**: Eliminate high-risk dependencies and ensure crash-resilience for all connectors.
 
-**Goals completed:**
-- Core `Stream` and `BatchProcessor` facades.
-- Multi-backend architecture (Valkey, Kafka, Memory, File/LocalLog).
-- Pydantic-based schema validation and registry.
-- Basic consumer group semantics for Valkey and Kafka.
-- Exactly-once semantics through idempotent processing and dead-letter queues.
-- OpenTelemetry and Prometheus observability out of the box.
-- CLI foundation (`pspfctl`).
+- **[x] Serialization Migration**:
+    - Replace `pickle` with **Msgpack** as the default binary format in SQLite and RocksDB backends.
+    - Implement a "Safe JSON" fallback for human-readable state inspection.
+- **[ ] Durable Retry Tracking**:
+    - Refactor `KafkaStreamBackend` to store retry counters in the `StateStore` instead of in-memory.
+    - Ensure message retry state survives worker restarts.
+- **[ ] Idempotent Sinks**:
+    - Provide a standard `BaseSink` that enforces idempotency tokens for external side-effects (API calls, DB writes).
 
----
+## Phase 2: High-Performance Connectivity (Interop)
+**Objective**: Enhance Kafka reliability and support enterprise data formats.
 
-## Phase 2 — v0.2.x Beta 
-**Focus**: Operability, robustness, and stateful processing.
+- **[ ] Kafka Low-Watermark Commits**:
+    - Implement a local offset manager for Kafka that tracks the "low-watermark" of a batch.
+    - Ensure that failing messages stop the offset progression of the entire partition to prevent data loss.
+- **[ ] Pluggable Serializers**:
+    - Support **Protobuf** and **Avro** as first-class schemas.
+    - Add a `SchemaRegistry` integration for Kafka.
+- **[ ] Batch Performance Tuning**:
+    - Introduce `aiokafka` producer batching and compression settings in `ValkeySettings`.
 
-**Goals:**
-- **LocalLog Advancements**: Log segmentation (rotating log files), safe recovery scanning after crash, and per-record checksums.
-- **State Store Integration**: Simplify attaching state stores (`SQLite`, `RocksDB`) directly via the high-level `Stream` facade.
-- **Admin API Expansion**: Expand the `8001` control endpoints to report detailed partition cluster status.
-- **CLI Enhancements**: Add cluster management, diagnostic checks, and more fine-grained replay tools to `pspfctl`.
-- **Structured Logging Enhancements**: Further refine NDJSON output context.
-- **Time Semantics & Watermarks**: Introduce Event Time vs Processing Time concepts and watermarking for handling late-arriving data.
-- **Windowing Primitives**: Basic Tumbling and Sliding window support to enable bounded aggregations on unbounded streams.
-- **State Store TTL**: Time-to-live and automatic compaction mechanisms for state stores to prevent memory bloat over time.
+## Phase 3: Operational Excellence (Stability)
+**Objective**: Simplify deployment and improve cluster-wide stability.
 
----
-
-## Phase 3 — v0.5.x High Availability 
-**Focus**: Multi-node durability.
-
-**Goals:**
-- **Replication**: Leader/follower partition model for the Native File Log.
-- **Failover**: Automatic leader election and resynchronization.
-- **Rebalancing**: Zero-downtime scaling and automatic consumer partition distribution for non-networked backends.
-- **Transactional State (EOS)**: Atomic processing guarantees across offset commits and state store updates.
-- **Interactive Queries**: Expose local RocksDB/Memory state stores via API so external services can query aggregations without a secondary database.
+- **[ ] Resilient Port Binding**:
+    - Implement automatic port incrementing for Admin API and Telemetry if the default port is occupied.
+    - Expose `actual_port` in the cluster metadata for coordinator discovery.
+- **[ ] Optimized Cluster Rebalancing**:
+    - Extract rebalancing logic from the 3s heartbeat loop into a membership-triggered `StateSync` event.
+    - Reduce Valkey/Redis overhead by 40% in large clusters.
+- **[x] Native CLI Tooling**:
+    - Implement `pspf-cli` for live stream tailing, manual DLO reprocessing, and state inspection via the Admin API.
 
 ---
 
-## Phase 4 — v1.0 Production Release
-**Focus**: Stability and ecosystem growth.
-
-**Goals:**
-- Stable Plugin ecosystem.
-- Decorator-based stream handlers (`@stream.subscribe`).
-- Mature Helm charts and Kubernetes deployment examples.
-- Comprehensive crash testing benchmarks.
-- **Complex Topologies & Joins**: Support for stream-to-stream and stream-to-table joins.
-
----
-
-## Versioning Strategy
-- **v0.1.x**: Alpha (Breaking changes possible but documented)
-- **v0.2.x - v0.9.x**: Beta / Pre-production feature expansion
-- **v1.0**: Stable production API
-
-Semantic versioning will strictly be followed after v1.0.
-
----
-
-## Target Use Cases
-
-### Small & Medium Systems
-- Internal analytics pipelines.
-- Microservice event processing (replacing Celery/RabbitMQ for event-driven logic).
-- SaaS backend workflows.
-
-### Edge & Embedded Systems
-- IoT gateways and on-prem local aggregations.
-- Offline-first analytics.
-
-## Non-Goals
-The following are intentionally deprioritized:
-- Global geo-replication.
-- Petabyte-scale massive concurrency.
-- JVM-level extreme throughput competition.
-
-**PSPF prioritizes simplicity and reliability over extreme scale.**
+## Evaluation Metrics
+- **Data Loss Rate**: Zero (Verified via Chaos testing).
+- **Startup Time**: < 1s (Delayed Admin start).
+- **Security Compliance**: No `pickle` usage in production paths (Completed).

@@ -1,0 +1,38 @@
+replicaCount: 3
+
+image:
+  repository: my-repo/pspf-app
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8001
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+valkey:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  primary:
+    service:
+      ports:
+        redis: 6379
+
+env:
+  - name: PSPF_VALKEY_HOST
+    value: "{{ .Release.Name }}-valkey-master"
+  - name: PSPF_VALKEY_PORT
+    value: "6379"

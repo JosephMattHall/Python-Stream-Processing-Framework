@@ -11,6 +11,10 @@ class Window(ABC):
         """
         pass
 
+    @property
+    def is_session(self) -> bool:
+        return False
+
 class TumblingWindow(Window):
     """
     Fixed-size, non-overlapping windows.
@@ -43,3 +47,19 @@ class SlidingWindow(Window):
              windows.append((current_start / 1000.0, (current_start + self.size_ms) / 1000.0))
              current_start -= self.slide_ms
         return windows
+class SessionWindow(Window):
+    """
+    Windows defined by activity gaps.
+    Note: Real session windowing usually requires stateful merging in the operator.
+    This assigner returns a provisional window [ts, ts + gap].
+    """
+    def __init__(self, gap_ms: int):
+        self.gap_ms = gap_ms
+
+    def assign_windows(self, timestamp: float) -> List[Tuple[float, float]]:
+        ts_ms = int(timestamp * 1000)
+        return [(ts_ms / 1000.0, (ts_ms + self.gap_ms) / 1000.0)]
+
+    @property
+    def is_session(self) -> bool:
+        return True

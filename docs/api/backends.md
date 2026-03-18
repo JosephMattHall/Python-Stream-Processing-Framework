@@ -26,10 +26,8 @@ PSPF supports multiple backends for stream storage and coordination.
 
 ---
 
-## Local Log (Experimental)
+## Local Log
 
-### FileSource
-::: pspf.connectors.file.FileSource
+### FileStreamBackend
+::: pspf.connectors.file.FileStreamBackend
 
-### StorageSink
-::: pspf.connectors.file.StorageSink

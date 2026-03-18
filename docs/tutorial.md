@@ -37,33 +37,26 @@ Create a file named `consumer.py`:
 ```python
 # consumer.py
 import asyncio
-from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
+from pspf import Stream
 from schema import OrderCreated
 
-async def process_order(event: OrderCreated):
-    """
-    Business logic called for every new event.
-    """
-    print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
-    await asyncio.sleep(0.5) # Simulate work
-    print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
-
 async def main():
-    # 1. Configure the Connector
-    connector = ValkeyConnector(host='localhost', port=6379)
-    
-    # 2. Setup the Stream Backend
-    backend = ValkeyStreamBackend(
-        connector, 
-        stream_key="orders", 
-        group_name="fulfillment-service", 
-        consumer_name="worker-1"
-    )
+    # 1. Define the Stream
+    # (PSPF will automatically connect to Valkey since it's the default)
+    stream = Stream(topic="orders", group="fulfillment-service")
 
-    # 3. Start the Stream Processing Loop
+    # 2. Register the Handler
+    @stream.subscribe("orders", schema=OrderCreated)
+    async def process_order(event: OrderCreated):
+        print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
+        await asyncio.sleep(0.5) 
+        print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
+
+
+    # 5. Start the Stream Processing Loop
     print("🚀 Fulfillment Service Started...")
-    async with Stream(backend, schema=OrderCreated) as stream:
-        await stream.run(process_order)
+    async with stream:
+        await stream.run_forever()
 
 if __name__ == "__main__":
     try:
@@ -82,15 +75,11 @@ Create a file named `producer.py`:
 # producer.py
 import asyncio
 import uuid
-from pspf import Stream, ValkeyConnector, ValkeyStreamBackend
+from pspf import Stream
 from schema import OrderCreated
 
 async def main():
-    connector = ValkeyConnector(host='localhost', port=6379)
-    # Producers use the same backend but typically don't need unique consumer names
-    backend = ValkeyStreamBackend(connector, "orders", "producer-group", "producer")
-
-    async with Stream(backend, schema=OrderCreated) as stream:
+    async with Stream(topic="orders", group="producer-group", schema=OrderCreated) as stream:
         print("📤 Sending orders...")
         for i in range(5):
             order = OrderCreated(
@@ -125,6 +114,64 @@ python producer.py
 ### Results
 You will see orders appearing in the Consumer window as they are emitted by the Producer.
 
+---
+
+## Alternative: Testing Locally with MemoryBackend
+
+If you don't have Valkey or Redis running or just want to quickly test the application logic entirely in memory, you can swap the backend in a single file approach.
+
+Create a file named `memory_tutorial.py`:
+
+```python
+import asyncio
+import uuid
+from pspf import Stream
+from pspf.connectors.memory import MemoryBackend
+from schema import OrderCreated
+
+async def main():
+    # 1. Use the MemoryBackend via topic/group (auto-instantiates if Valkey is missing)
+    stream = Stream(topic="orders", group="local-test-group")
+
+    # 2. Register the Handler
+    @stream.subscribe("orders", schema=OrderCreated)
+    async def process_order(event: OrderCreated):
+        print(f"📦 [START] Processing Order {event.order_id} for User {event.user_id}")
+        await asyncio.sleep(0.5) 
+        print(f"✅ [DONE ] Shipped {event.quantity}x {event.sku}")
+
+    # 3. Start the Stream Processing Loop in the background
+    print("🚀 Fulfillment Service Started (In-Memory)...")
+    task = asyncio.create_task(stream.run_forever())
+
+    # 4. Produce events in the same script
+    print("📤 Sending orders...")
+    for i in range(3):
+        order = OrderCreated(
+            order_id=str(uuid.uuid4())[:8],
+            user_id=f"user-{i}",
+            sku="WIDGET-TEST",
+            quantity=2,
+            amount=19.99
+        )
+        msg_id = await stream.emit(order)
+        print(f"   -> Sent {order.order_id} (ID: {msg_id})")
+        await asyncio.sleep(1)
+
+    # Clean up
+    await stream.stop()
+    await task
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run it with a single command:
+```bash
+python memory_tutorial.py
+```
+
 ## Next Steps
-1. **Scale**: Run multiple `consumer.py` instances with different `consumer_name` values to see automatic load balancing.
-2. **Recover**: Stop a consumer mid-process and restart it; PSPF will recover the "in-flight" message automatically.
+1. **Scale**: Run multiple `consumer.py` instances with different `consumer_name` values to see automatic load balancing (Requires Valkey backend).
+2. **Recover**: Stop a consumer mid-process and restart it; PSPF will recover the "in-flight" message automatically (Requires persistent backend).
+3. **Functional DSL**: For complex transformations, try the `StreamBuilder` API to chain `map` and `filter` operations.

@@ -4,13 +4,14 @@ import time
 import json
 from typing import Optional, List, Dict, Any
 from pspf.utils.logging import get_logger
+from pspf.cluster.interface import ClusterCoordinator as IClusterCoordinator
 import valkey.asyncio as valkey
 
 logger = get_logger("ClusterCoordinator")
 
-class ClusterCoordinator:
+class ValkeyClusterCoordinator(IClusterCoordinator):
     """
-    Manages node registration, heartbeats, and leader election using Valkey.
+    Valkey implementation of ClusterCoordinator.
     
     Keys:
     - pspf:nodes:<node_id> -> Metadata (TTL 10s)
@@ -20,10 +21,14 @@ class ClusterCoordinator:
         self.valkey_url = valkey_url
         self.host = host
         self.port = port
-        self.node_id = node_id or str(uuid.uuid4())
+        self._node_id = node_id or str(uuid.uuid4())
         self._running = False
         self._client: Optional[valkey.Redis] = None
         self._held_partitions: List[str] = []
+        
+    @property
+    def node_id(self) -> str:
+        return self._node_id
         
     async def start(self) -> None:
         self._client = valkey.from_url(self.valkey_url, decode_responses=True)
@@ -78,6 +83,40 @@ class ClusterCoordinator:
                     if not result:
                         logger.warning(f"Lost leadership for {p_key}")
                         self._held_partitions.remove(p_key)
+                        
+                # 3. Simple Rebalancing Check
+                try:
+                    cursor = 0
+                    node_keys = []
+                    while True:
+                        cursor, keys = await self._client.scan(cursor, match="pspf:nodes:*")
+                        node_keys.extend(keys)
+                        if cursor == 0 or cursor == b'0' or cursor == "0":
+                            break
+                            
+                    all_nodes_count = len(node_keys)
+                    if all_nodes_count > 1 and self._held_partitions:
+                        # We count known partition leader keys to estimate total active partitions
+                        cursor = 0
+                        part_keys = []
+                        while True:
+                            cursor, keys = await self._client.scan(cursor, match="pspf:partition:*:leader")
+                            part_keys.extend(keys)
+                            if cursor == 0 or cursor == b'0' or cursor == "0":
+                                break
+                                
+                        total_parts = len(part_keys) 
+                        
+                        # Add 1 to handle uneven remainders safely
+                        fair_share = (total_parts // all_nodes_count) + 1
+                        
+                        if len(self._held_partitions) > fair_share:
+                            # Voluntarily give up one partition lock so an idle node can claim it
+                            relinquished_p_key = self._held_partitions.pop(0)
+                            logger.info(f"Rebalancing: voluntarily giving up partition {relinquished_p_key} (holding {len(self._held_partitions)+1}, fair share <= {fair_share})")
+                            await self._client.delete(f"pspf:partition:{relinquished_p_key}:leader")
+                except Exception as e:
+                    logger.warning(f"Rebalancing routine encountered an issue: {e}")
                         
             except Exception as e:
                 logger.error(f"Heartbeat error: {e}")
@@ -158,3 +197,6 @@ class ClusterCoordinator:
                 break
                 
         return nodes
+
+# Alias for backward compatibility
+ClusterCoordinator = ValkeyClusterCoordinator

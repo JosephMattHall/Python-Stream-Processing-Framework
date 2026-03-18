@@ -106,6 +106,15 @@ class ValkeyStreamBackend(StreamingBackend):
     def group_name(self) -> str:
         return self._group_name
 
+    def clone_with_topic(self, topic: str) -> "ValkeyStreamBackend":
+        """Create a new backend instance for a different topic, sharing the underlying connection."""
+        return ValkeyStreamBackend(
+            connector=self.connector,
+            stream_key=topic,
+            group_name=self.group_name,
+            consumer_name=self.consumer_name
+        )
+
     async def connect(self) -> None:
         await self.connector.connect()
 
@@ -317,6 +326,8 @@ class ValkeyStreamBackend(StreamingBackend):
             )
             next_id = result[0]
             messages = result[1]
+
+
             
             if messages:
                 logger.warning(f"Consumer {self.consumer_name} claimed {len(messages)} stuck messages.")

@@ -177,31 +177,65 @@ class KafkaStreamBackend(StreamingBackend):
         return []
 
     async def increment_retry_count(self, message_id: str) -> int:
-        # We need an external store for retry counts (like Redis)
-        # Or encode verify count in message and re-produce to retry topic.
-        # For this demo, let's use a simple in-memory map or log warning.
-        # Ideally, we should use a side-store or state store.
-        # Returning 0 effectively disables retry counting logic in Processor, which might be okay loop-forever.
-        # Or, we can use a separate Redis for state?
-        return 1
+        """
+        Increment and return the retry count for a message.
+        Currently uses an in-memory map as Kafka doesn't have native message metadata updates.
+        In production, this should ideally be backed by a StateStore.
+        """
+        if not hasattr(self, "_retry_counts"):
+            self._retry_counts: Dict[str, int] = {}
+        
+        self._retry_counts[message_id] = self._retry_counts.get(message_id, 0) + 1
+        return self._retry_counts[message_id]
 
     async def move_to_dlq(self, message_id: str, data: Dict[str, Any], error: str) -> None:
          # Produce to DLQ topic
          dlq_topic = f"{self.topic}-dlq"
          if self.producer:
              data["_error"] = error
+             data["_original_id"] = message_id
              payload = json.dumps(data).encode("utf-8")
              await self.producer.send_and_wait(dlq_topic, payload)
 
     async def get_pending_info(self) -> Dict[str, Any]:
         """
-        Retrieves lag info from Kafka.
-        Currently returns 0 as calculating lag requires admin client or partition queries.
+        Retrieves lag info from Kafka by comparing committed offsets to end offsets.
         """
-        # TODO: Implement actual Kafka lag calculation using high watermarks
-        return {
-            "pending": 0, 
-            "lag": 0,
-            "consumers": 1
-        }
+        if not self.consumer:
+            return {"lag": 0, "pending": 0, "status": "disconnected"}
+            
+        try:
+            partitions = self.consumer.assignment()
+            if not partitions:
+                # If no assignment yet, we can't calculate lag
+                return {"lag": 0, "pending": 0, "status": "no_assignment"}
+                
+            # Get committed offsets
+            committed_tasks = [self.consumer.committed(tp) for tp in partitions]
+            committed_results = await asyncio.gather(*committed_tasks)
+            committed_map = dict(zip(partitions, committed_results))
+            
+            # Get end offsets
+            end_offsets = await self.consumer.end_offsets(partitions)
+            
+            total_lag = 0
+            for tp in partitions:
+                committed_offset = committed_map.get(tp)
+                end_offset = end_offsets.get(tp, 0)
+                
+                if committed_offset is not None:
+                    total_lag += max(0, end_offset - committed_offset)
+                else:
+                    # If never committed, we assume lag is the full partition if we don't know start
+                    total_lag += end_offset
+                    
+            return {
+                "lag": total_lag,
+                "pending": total_lag,
+                "partition_count": len(partitions),
+                "status": "connected"
+            }
+        except Exception as e:
+            logger.warning(f"Failed to calculate Kafka lag: {e}")
+            return {"lag": 0, "pending": 0, "error": str(e)}
 

@@ -6,14 +6,13 @@ It is designed for building event-driven applications, event sourcing systems, a
 
 > **Note**: While the Quick Start below uses Valkey (Redis), PSPF is backend-agnostic! You can also use Kafka, or the local-only Memory and File backends for testing without Docker.
 
-## Key Features
-
-- **Valkey-Based Streams:** Production-ready stream processing using Valkey (or Redis) as the message broker.
-- **Kafka-like Semantics:** Partitions, consumer groups, and high-performance throughput.
-- **Exactly-Once Semantics:** Idempotent processing with built-in deduplication.
-- **Partitioned Concurrency:** Automatic load balancing across consumer instances.
-- **Built-in Observability:** Prometheus metrics, Grafana dashboards, and Admin API.
-- **Native Event Log (Preview):** Lightweight file-based log for local-only use cases.
+- **Auto-Instantiation:** Simply provide a topic and group; PSPF handles backend setup automatically (Valkey with Memory fallback).
+- **Decorator API:** Simple `@stream.subscribe` and `@stream.window` handlers for rapid development.
+- **Exactly-Once Semantics:** Atomic transactions where state and offsets are committed together.
+- **Reliability & DLQ:** Built-in retries and Dead Letter Queues (DLQ) for failed or late events.
+- **Zero-Downtime Scaling:** Automatic partition rebalancing across worker clusters.
+- **Cloud Native:** Built-in Helm charts for Kubernetes and Prometheus monitoring.
+- **Powerful CLI:** Inspect logs, manage consumer groups, and handle DLQs directly.
 
 ## Installation
 
@@ -23,7 +22,22 @@ pip install pspf
 
 ## Quick Start: User Signups
 
-PSPF makes it easy to handle high-volume event streams. Here is a simple processor that handles user signups.
+PSPF makes it easy to handle high-volume event streams. 
+
+```python
+from pspf import Stream
+
+# Auto-instantiates Valkey (fallback to Memory if Valkey is unavailable)
+stream = Stream(topic="signups", group="group1")
+
+@stream.subscribe("signups")
+async def handle_signup(event):
+    print(f"Welcome {event['email']}!")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(stream.run_forever())
+```
 
 ### 1. Requirements
 Ensure you have Valkey (or Redis) running:

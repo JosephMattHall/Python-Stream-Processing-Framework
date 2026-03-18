@@ -89,7 +89,6 @@ Here is the absolute minimum you need to get a worker running.
 ```python
 import asyncio
 from pspf import Stream, BaseEvent
-from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
 
 # 1. Define your data
 class GreetingEvent(BaseEvent):
@@ -101,15 +100,19 @@ async def handle_greeting(event: GreetingEvent):
 
 # 3. Connect it all together
 async def main():
-    connector = ValkeyConnector(host="localhost", port=6379)
-    backend = ValkeyStreamBackend(connector, "greetings_stream", "group1", "worker1")
-    
-    async with Stream(backend, schema=GreetingEvent) as stream:
+    # Auto-instantiates Valkey (fallback to Memory if Valkey is unavailable)
+    stream = Stream(topic="greetings_stream", group="group1", schema=GreetingEvent)
+
+    @stream.subscribe("greetings_stream")
+    async def handle_greeting(event: GreetingEvent):
+        print(f"Received Greeting: {event.message}")
+
+    async with stream:
         # Emit a message
         await stream.emit(GreetingEvent(message="Hello World!"))
         
         # Start consuming
-        await stream.run(handler=handle_greeting)
+        await stream.run_forever()
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -127,9 +130,9 @@ Every worker exposes an HTTP endpoint (default `8000`) that Prometheus can scrap
 - **`stream_messages_processed_total`**: Throughput and error rates.
 - **`stream_processing_seconds`**: Latency—how long is your code taking to run?
 
-### Dynamic Control (Admin API)
-The Admin API (default `8001`) allows you to manage workers without restarting them.
-- **Pause/Resume**: Need to stop processing to perform maintenance? Just `POST /control/pause`.
+### Dynamic Control (Admin API) & CLI
+The Admin API (default `8001`) allows you to manage workers.
+- **DLQ Management**: Inspect and purge your dead letter queues via the `pspfctl dlq-inspect <stream>` and `pspfctl dlq-purge <stream>` CLI commands.
 - **Health Checks**: Standard `GET /health` for Kubernetes/Docker health checks.
 
 ### Visualizing with Grafana

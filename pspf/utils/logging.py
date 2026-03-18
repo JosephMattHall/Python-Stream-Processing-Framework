@@ -3,7 +3,25 @@ import sys
 import json
 import datetime
 import os
+import contextvars
 from typing import Any, Dict
+
+# Global context for structured logging
+log_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar("log_context", default={})
+
+def bind_context(**kwargs: Any) -> contextvars.Token:
+    """Binds variables to the current logging context."""
+    ctx = log_context.get().copy()
+    ctx.update(kwargs)
+    return log_context.set(ctx)
+
+def reset_context(token: contextvars.Token) -> None:
+    """Resets the context to the previous state."""
+    log_context.reset(token)
+
+def clear_context() -> None:
+    """Clears the logging context."""
+    log_context.set({})
 
 class JSONFormatter(logging.Formatter):
     """
@@ -20,17 +38,22 @@ class JSONFormatter(logging.Formatter):
             "pid": os.getpid(),
         }
 
+        # Include contextual variables
+        ctx_data = log_context.get()
+        if ctx_data:
+            log_record.update(ctx_data)
+
         # Include custom attributes from 'extra'
         if hasattr(record, 'extra'):
              log_record.update(record.extra) # type: ignore
 
         # Include exception info if present
         if record.exc_info:
-            log_record["exception"] = self.formatException(record.exc_info)
+            log_record["exception"] = self.formatException(record.exc_info) # type: ignore
         
         # Include stack info if present
         if record.stack_info:
-            log_record["stack_trace"] = self.formatStack(record.stack_info)
+            log_record["stack_trace"] = self.formatStack(record.stack_info) # type: ignore
 
         return json.dumps(log_record)
 

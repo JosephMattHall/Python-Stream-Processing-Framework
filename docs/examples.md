@@ -22,7 +22,10 @@ PSPF includes several working examples to help you understand different patterns
 **Description**: A lightweight validation script that uses the `MemoryBackend` to test processor logic without external dependencies.
 - Run: `python examples/verify_memory.py`
 
-## Refactor Verification
-**File**: `examples/verify_refactor.py`  
-**Description**: End-to-end verification of the framework's core components (BatchProcessor, DLO, Metrics).
 - Run: `python examples/verify_refactor.py`
+
+## Chaos Stress-Test Demo
+**File**: `examples/chaos_demo.py`  
+**Description**: A heavy-duty stress test that spawns and kills workers randomly to verify the framework's fault-tolerance and consumer-group rebalancing.
+- Run: `python examples/chaos_demo.py`
+

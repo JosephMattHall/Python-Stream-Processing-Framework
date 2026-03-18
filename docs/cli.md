@@ -32,14 +32,31 @@ pspfctl status --url http://localhost:8001
 # Output: ✅ Worker Online: {'status': 'ok', 'worker_state': 'running'}
 ```
 
-#### Pause Processing
-Pauses the consumer loop. The process remains alive but stops pulling new messages.
+#### Cluster Status
+View the global cluster topology and partition assignments.
 ```bash
-pspfctl pause --url http://localhost:8001
+pspfctl cluster-status
 ```
 
-#### Resume Processing
-Resumes the consumer loop efficiently.
+#### Consumer Group Management
+List groups or reset offsets for a specific stream.
 ```bash
-pspfctl resume --url http://localhost:8001
+# List all groups for a stream
+pspfctl groups orders
+
+# Reset a group's offset to the beginning (0) or end ($)
+pspfctl reset orders my-group 0
+```
+
+#### Managing DLQs
+Inspect, purge, or replay messages from a Dead Letter Queue.
+```bash
+# View last 5 messages in DLQ
+pspfctl dlq-inspect orders --limit 5
+
+# Replay messages back to the main stream
+pspfctl replay orders my-group --limit 100
+
+# Clear the DLQ
+pspfctl dlq-purge orders
 ```

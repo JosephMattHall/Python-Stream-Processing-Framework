@@ -1,0 +1,143 @@
+from typing import Dict, Any, TYPE_CHECKING
+from fastapi import FastAPI, HTTPException
+from pspf.utils.logging import get_logger
+from pspf.models import StreamRecord
+import zlib
+import httpx
+
+if TYPE_CHECKING:
+    from pspf.processor import BatchProcessor
+
+logger = get_logger("ClusterAPI")
+
+def create_api_app(processor: "BatchProcessor") -> FastAPI:
+    """
+    Creates the FastAPI Cluster Application for inter-node RPC and health checks.
+    
+    Args:
+        processor: The active BatchProcessor instance.
+    """
+    app = FastAPI(title="PSPF Cluster API", version="0.1.0")
+    
+    @app.get("/health")
+    async def health_check() -> Dict[str, str]:
+        """Returns the health status of the worker."""
+        if processor._running:
+            return {"status": "ok", "worker_state": "running"}
+        return {"status": "stopped", "worker_state": "stopped"}
+
+    @app.get("/state/{key}")
+    async def get_state(key: str) -> Dict[str, Any]:
+        """Interactive Query: fetch a key from the cluster state store."""
+        if not processor.state_store:
+            raise HTTPException(status_code=404, detail="No state store configured on this worker")
+        
+        # Check ownership if HA is enabled
+        if hasattr(processor, "replicated_log") and processor.replicated_log:
+            try:
+                log = processor.replicated_log
+                coordinator = log._coordinator
+                num_partitions = log.partitions()
+                
+                # Determine target partition (consistent with LocalLog)
+                target_p = zlib.crc32(key.encode()) % num_partitions
+                target_p_str = str(target_p)
+                
+                # If we don't hold this partition, find the leader and proxy
+                if target_p_str not in coordinator._held_partitions:
+                    leader = await coordinator.get_leader_node(target_p_str)
+                    if leader:
+                        url = f"http://{leader['host']}:{leader['port']}/state/{key}"
+                        async with httpx.AsyncClient(timeout=2.0) as client:
+                            try:
+                                resp = await client.get(url)
+                                if resp.status_code == 200:
+                                    data = resp.json()
+                                    data["_metadata"] = {"proxied": True, "leader_id": leader["id"]}
+                                    return data
+                                elif resp.status_code == 404:
+                                    raise HTTPException(status_code=404, detail=f"Key {key} not found on leader")
+                                else:
+                                    raise HTTPException(status_code=502, detail=f"Leader error: {resp.text}")
+                            except httpx.RequestError as e:
+                                logger.error(f"Failed to proxy query to {url}: {e}")
+                                raise HTTPException(status_code=503, detail="State leader unreachable")
+                    else:
+                        # Fallback: Partition might be in transition, try local just in case
+                        logger.warning(f"No leader for partition {target_p_str}, querying local as fallback")
+            except Exception as e:
+                if isinstance(e, HTTPException): raise
+                logger.error(f"Error in distributed query routing: {e}")
+        
+        # Local Query
+        try:
+            val = await processor.state_store.get(key)
+            if val is None:
+                raise HTTPException(status_code=404, detail=f"Key {key} not found")
+            return {"key": key, "value": val}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error querying state: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/cluster/status")
+    async def cluster_status() -> Dict[str, Any]:
+        """Returns detailed cluster and partition status."""
+        status: Dict[str, Any] = {
+            "ha_enabled": False,
+            "node_id": None,
+            "nodes": [],
+            "held_partitions": []
+        }
+        
+        if hasattr(processor, "replicated_log") and processor.replicated_log:
+            try:
+                coordinator = processor.replicated_log._coordinator # type: ignore
+                status["ha_enabled"] = True
+                status["node_id"] = coordinator.node_id
+                status["held_partitions"] = coordinator._held_partitions
+                status["nodes"] = await coordinator.get_other_nodes()
+            except Exception as e:
+                logger.error(f"Error fetching cluster status: {e}")
+                status["error"] = str(e)
+                
+        return status
+
+    @app.post("/internal/replicate")
+    async def replicate_record(record: StreamRecord) -> Dict[str, str]:
+        """
+        Internal endpoint for receiving replicated records from the leader.
+        """
+        try:
+            # We assume the processor has 'replicated_log' attached if HA is enabled
+            if hasattr(processor, "replicated_log") and processor.replicated_log:
+                 await processor.replicated_log.append_follower(record)
+                 return {"status": "acked"}
+            else:
+                 raise HTTPException(status_code=501, detail="Replication not enabled on this node")
+        except Exception as e:
+            logger.error(f"Replication failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/internal/pull/{partition}")
+    async def pull_records(partition: int, offset: int = 0) -> list[Dict[str, Any]]:
+        """
+        Internal endpoint for followers to pull missing records from the leader.
+        """
+        try:
+            if hasattr(processor, "replicated_log") and processor.replicated_log:
+                records = []
+                # Read up to 100 records
+                async for r in processor.replicated_log._local.read(partition, offset):
+                    records.append(r.model_dump(mode='json'))
+                    if len(records) >= 100:
+                        break
+                return records
+            else:
+                 raise HTTPException(status_code=501, detail="Replication not enabled on this node")
+        except Exception as e:
+            logger.error(f"Pull failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    return app

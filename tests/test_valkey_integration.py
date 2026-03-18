@@ -74,6 +74,7 @@ class TestStreamArchitecture(unittest.IsolatedAsyncioTestCase):
                 # Instead, let's cancel the loop after a short delay.
                 task = asyncio.create_task(stream.run(handler, batch_size=2))
                 await asyncio.sleep(0.1)
+                await stream.processor.shutdown()
                 task.cancel()
                 try:
                     await task

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union, Dict
+from typing import Any, Optional, Union, Dict, AsyncIterator
+from contextlib import asynccontextmanager
 
 class StateStore(ABC):
     """
@@ -7,10 +8,15 @@ class StateStore(ABC):
     """
     
     @abstractmethod
-    @abstractmethod
     async def start(self) -> None:
         """Initialize the store (e.g. connect to DB)."""
         pass
+
+    @abstractmethod
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[None]:
+        """Provide a transactional context for atomic operations."""
+        yield
 
     @abstractmethod
     async def stop(self) -> None:
@@ -23,9 +29,8 @@ class StateStore(ABC):
         pass
 
     @abstractmethod
-    @abstractmethod
-    async def put(self, key: str, value: Any) -> None:
-        """Store a value by key."""
+    async def put(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> None:
+        """Store a value by key with optional TTL."""
         pass
 
     @abstractmethod
@@ -33,7 +38,6 @@ class StateStore(ABC):
         """Store multiple values in a batch."""
         pass
 
-    @abstractmethod
     @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete a key."""

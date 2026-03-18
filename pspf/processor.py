@@ -2,7 +2,7 @@ import asyncio
 import signal
 import time
 from typing import Callable, Awaitable, Dict, Any, List, Optional
-from pspf.utils.logging import get_logger
+from pspf.utils.logging import get_logger, bind_context, reset_context
 from pspf.connectors.base import StreamingBackend
 from pspf.telemetry import TelemetryManager
 from opentelemetry import trace
@@ -29,7 +29,7 @@ class BatchProcessor:
         min_idle_time_ms (int): Min idle time for message recovery. Default 60000.
         state_store (StateStore): Optional state backend.
     """
-    def __init__(self, backend: StreamingBackend, max_retries: int = 3, min_idle_time_ms: int = 60000, state_store: Optional[StateStore] = None):
+    def __init__(self, backend: StreamingBackend, max_retries: int = 3, min_idle_time_ms: int = 60000, state_store: Optional[StateStore] = None, start_admin_server: bool = True):
         """
         Initialize the BatchProcessor.
 
@@ -47,6 +47,8 @@ class BatchProcessor:
         self.state_store = state_store
         self.tracer = self.telemetry.get_tracer()
         self._paused = False
+        self._start_admin = start_admin_server
+        self._background_tasks = set()
 
     def pause(self) -> None:
         """Pause message consumption."""
@@ -116,13 +118,23 @@ class BatchProcessor:
         if self.state_store:
             await self.state_store.start()
 
+        if hasattr(self, "replicated_log") and self.replicated_log:
+            await self.replicated_log.start()
+
         logger.info(f"Entered run loop. Consuming from {self.backend.stream_key} (Group: {self.backend.group_name})")
 
         # Start Admin Server
-        admin_task = asyncio.create_task(self._start_admin_server())
+        admin_task = None
+        # Start background health/api server
+        if self._start_admin:
+            task = asyncio.create_task(self._start_api_server())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
         
         # Start Lag Monitor
         monitor_task = asyncio.create_task(self._monitor_metrics(interval=10.0))
+        self._background_tasks.add(monitor_task)
+        monitor_task.add_done_callback(self._background_tasks.discard)
         
         # Set Worker Status = 1
         consumer_name = getattr(self.backend, 'consumer_name', 'unknown')
@@ -183,8 +195,13 @@ class BatchProcessor:
         finally:
             monitor_task.cancel()
             
-            # Shutdown Admin Server
-            admin_task.cancel()
+            # Shutdown Admin Server gracefully if possible
+            if self._start_admin:
+                if hasattr(self, "_admin_server"):
+                    self._admin_server.should_exit = True
+                    self._admin_server.force_exit = True
+                if admin_task:
+                    admin_task.cancel()
             
             self.telemetry.metrics.worker_status.labels(
                 stream=stream_name, 
@@ -193,25 +210,34 @@ class BatchProcessor:
             ).set(0)
             try:
                 await monitor_task
-                await admin_task
+                if admin_task:
+                    await admin_task
             except asyncio.CancelledError:
                 pass
 
         if self.state_store:
             await self.state_store.stop()
 
+        if hasattr(self, "replicated_log") and self.replicated_log:
+            await self.replicated_log.stop()
+
         self._shutdown_complete.set()
         logger.info("Processor stopped gracefully.")
 
-    async def _start_admin_server(self) -> None:
+    async def _start_api_server(self) -> None:
         """
-        Starts the Admin API server.
+        Starts the Cluster API server for RPC and Health checks.
         """
+        import os
+        if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("NO_ADMIN"):
+            logger.info("Skipping Cluster API server start during tests.")
+            return
+
         try:
             from uvicorn import Config, Server
-            from pspf.admin import create_admin_app
+            from pspf.api import create_api_app
             
-            app = create_admin_app(self)
+            app = create_api_app(self)
             config = Config(
                 app=app, 
                 host="0.0.0.0", 
@@ -220,14 +246,15 @@ class BatchProcessor:
                 log_level="warning" 
             )
             server = Server(config)
+            self._api_server = server
             
             # Disable signal handlers as we manage them
             server.install_signal_handlers = lambda: None # type: ignore
             
-            logger.info(f"Starting Admin API on port {settings.telemetry.ADMIN_PORT}")
+            logger.info(f"Starting Cluster API on port {settings.telemetry.ADMIN_PORT}")
             await server.serve()
         except Exception as e:
-            logger.error(f"Failed to start Admin API: {e}")
+            logger.error(f"Failed to start Cluster API: {e}")
 
     async def _monitor_metrics(self, interval: float = 10.0) -> None:
         """
@@ -247,7 +274,10 @@ class BatchProcessor:
             except Exception as e:
                 logger.warning(f"Error updating metrics: {e}")
             
-            await asyncio.sleep(interval)
+            try:
+                await asyncio.wait_for(self._shutdown_event.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass # Continue loop
 
     async def _process_single_message(self, handler: Callable, msg_id: str, data: Dict[str, Any], stream_name: str) -> bool:
         """
@@ -262,16 +292,40 @@ class BatchProcessor:
             context=ctx,
             attributes={"messaging.message_id": msg_id, "messaging.destination": stream_name}
         ) as span:
+            # Bind structured logging context
+            log_token = bind_context(
+                stream=stream_name,
+                group=self.backend.group_name,
+                msg_id=msg_id
+            )
             try:
+                # EOS Check: Has this message already been processed statefully?
+                if self.state_store:
+                    last_id = await self.state_store.get_checkpoint(stream_name, self.backend.group_name)
+                    if last_id and msg_id <= last_id:
+                        logger.debug(f"Skipping already processed message {msg_id} (Checkpoint: {last_id})")
+                        return True # Count as success so it gets ACKed in Valkey
+                
                 # Inspect handler signature to see if it wants context
+
                 sig = inspect.signature(handler)
-                if len(sig.parameters) >= 3:
-                    # Stateful: handler(msg_id, data, ctx)
-                    processing_ctx = Context(state=self.state_store)
-                    await handler(msg_id, data, processing_ctx)
+                
+                async def invoke_handler() -> None:
+                    if len(sig.parameters) >= 3:
+                        # Stateful: handler(msg_id, data, ctx)
+                        processing_ctx = Context(state=self.state_store)
+                        await handler(msg_id, data, processing_ctx)
+                    else:
+                        # Stateless: handler(msg_id, data)
+                        await handler(msg_id, data)
+
+                if self.state_store:
+                    async with self.state_store.transaction():
+                        await invoke_handler()
+                        # Record checkpoint offset atomically with state changes
+                        await self.state_store.checkpoint(stream_name, self.backend.group_name, msg_id)
                 else:
-                    # Stateless: handler(msg_id, data)
-                    await handler(msg_id, data)
+                    await invoke_handler()
 
                 # Metrics
                 duration = time.time() - PROCESS_START
@@ -289,6 +343,8 @@ class BatchProcessor:
                 
                 await self._handle_processing_error(msg_id, data, e)
                 return False
+            finally:
+                reset_context(log_token)
 
     async def _handle_processing_error(self, msg_id: str, data: Dict[str, Any], error: Exception) -> None:
         """

@@ -12,9 +12,14 @@ graph TD
     Stream --> Backend[StreamingBackend]
     Stream --> Processor[BatchProcessor]
     Stream --> Schema[Pydantic Schema]
+    Stream --> Coordinator[ClusterCoordinator]
     
     Backend --> Connector[Connector]
     Connector --> DB[(Valkey/Kafka/File)]
+    
+    Coordinator --> Registry[(Valkey/Shared State)]
+    Processor --> Admin[Admin API]
+    Admin <--> Coordinator
 ```
 
 ### 1. Stream Facade
@@ -35,7 +40,13 @@ The engine that drives the consumption loop.
 - **Signal Handling**: Gracefully shuts down on `SIGTERM`.
 - **Observability**: Updates Prometheus metrics and starts Tracing spans.
 
-### 4. Schema (Pydantic)
+### 4. ClusterCoordinator
+Manages node membership and partition leadership.
+- **Lease Management**: Uses distributed locks to ensure only one worker owns a partition.
+- **Failover**: Automatically reassigns partitions if a node heartbeats time out.
+- **Service Discovery**: Maintains a registry of active nodes for cross-node query routing.
+
+### 5. Schema (Pydantic)
 Ensures data integrity.
 - **Validation**: All incoming/outgoing data is validated against a Pydantic model.
 - **Serialization**: Automatic JSON serialization.

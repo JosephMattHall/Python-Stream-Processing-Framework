@@ -96,7 +96,7 @@ feat: add windowed reduce operator
 fix: handle checkpoint retry edge case
 refactor: simplify pipeline state lifecycle
 docs: expand runtime architecture section
-tests: add coverage for FileSource batching
+tests: add coverage for FileStreamBackend batching
 Keep PRs small and focused where possible.
 
 🧩 Design Principles

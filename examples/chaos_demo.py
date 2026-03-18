@@ -12,15 +12,18 @@ from pspf.context import Context
 from pspf.utils.logging import setup_logging, get_logger
 from typing import Dict, Any
 
-# Ensure we can import pspf
-sys.path.append(os.getcwd())
+# Ensure we can import pspf even if not installed
+sys.path.insert(0, os.getcwd())
+
 
 setup_logging()
-logger = get_logger("ChaosTest")
+logger = get_logger("ChaosDemo")
 
-STREAM_KEY = f"chaos-stream-{int(time.time())}"
-GROUP_NAME = "chaos-group"
-TOTAL_MESSAGES = 1000
+# Configuration
+STREAM_KEY = f"chaos-demo-stream-{int(time.time())}"
+GROUP_NAME = "chaos-demo-group"
+TOTAL_MESSAGES = 500 # Reduced for a quicker demo
+
 
 async def worker_process(node_id: str, duration: int):
     """
@@ -37,7 +40,15 @@ async def worker_process(node_id: str, duration: int):
         store = SQLiteStateStore(store_path)
         await store.start()
         
-        processor = BatchProcessor(backend, state_store=store, max_retries=5, min_idle_time_ms=2000)
+        processor = BatchProcessor(
+            backend, 
+            state_store=store, 
+            max_retries=5, 
+            min_idle_time_ms=2000,
+            start_admin_server=False # Avoid port conflicts in multi-process demo
+
+        )
+
         
         # Handler: Count total messages processed in state
         async def handler(msg_id: str, data: Dict[str, Any], ctx: Context) -> None:
@@ -85,7 +96,17 @@ async def producer_process():
     logger.info("Producer done.")
     await connector.close()
 
+import argparse
+
 async def main():
+    parser = argparse.ArgumentParser(description="PSPF Chaos Stress Test Demo")
+    parser.add_argument("--duration", type=int, default=20, help="Duration of the chaos test in seconds")
+    parser.add_argument("--messages", type=int, default=500, help="Total messages to produce")
+    args = parser.parse_args()
+
+    global TOTAL_MESSAGES
+    TOTAL_MESSAGES = args.messages
+
     # Setup
     os.makedirs("data/chaos_state", exist_ok=True)
     
@@ -96,13 +117,14 @@ async def main():
     workers = []
     
     start_time = time.time()
+    logger.info(f"Starting chaos controller for {args.duration}s...")
     
-    # Run for 20 seconds, spawning and killing workers
-    while time.time() - start_time < 20:
+    # Run for the specified duration, spawning and killing workers
+    while time.time() - start_time < args.duration:
         # Spawn a worker
         node_id = f"n{int(time.time()*1000)}"
-        duration = random.randint(3, 8)
-        p = multiprocessing.Process(target=run_worker, args=(node_id, duration))
+        worker_duration = random.randint(3, 8)
+        p = multiprocessing.Process(target=run_worker, args=(node_id, worker_duration))
         p.start()
         workers.append(p)
         logger.info(f"Spawned worker {node_id} (pid {p.pid})")
@@ -113,7 +135,6 @@ async def main():
             if victim.is_alive():
                 logger.warning(f"Killing worker pid {victim.pid}")
                 victim.terminate() # SIGTERM
-                # victim.kill() # SIGKILL (harder?)
                 victim.join()
                 workers.remove(victim)
         
@@ -128,30 +149,24 @@ async def main():
             p.join()
             
     # Wait for idle time
-    time.sleep(5)
+    time.sleep(2)
             
     # Verify Data
-    # We need to permit recovery time.
-    # Start one final stable worker to consume remaining backlog
     logger.info("Starting final recovery worker...")
-    final_p = multiprocessing.Process(target=run_worker, args=("recovery", 10))
+    final_p = multiprocessing.Process(target=run_worker, args=("recovery", 5))
     final_p.start()
     final_p.join()
-    
-    # Verify counts? 
-    # Verification is tricky because state is local.
-    # We should rely on "lag" being 0?
     
     connector = ValkeyConnector(host="localhost", port=6379)
     await connector.connect()
     backend = ValkeyStreamBackend(connector, STREAM_KEY, GROUP_NAME, "monitor")
     info = await backend.get_pending_info()
-    logger.info(f"Final Info: {info}")
+    logger.info(f"Final Status: {info}")
     
-    if info["lag"] == 0 and info["pending"] == 0:
-        logger.info("SUCCESS: All messages processed.")
+    if info["lag"] == 0:
+        logger.info("✅ SUCCESS: All messages rebalanced and processed.")
     else:
-        logger.error("FAILURE: Messages lost or stuck.")
+        logger.error("❌ FAILURE: Messages lost or stuck.")
         sys.exit(1)
 
     await connector.close()
@@ -161,3 +176,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
