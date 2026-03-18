@@ -1,8 +1,6 @@
 import asyncio
 import logging
 from pspf import Stream, BaseEvent
-from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
-from pspf.settings import settings
 from pydantic import Field
 
 # 1. Define a Schema
@@ -22,27 +20,16 @@ async def main() -> None:
     # Setup logging
     logging.basicConfig(level=logging.INFO)
     
-    # "Dependency Injection"
-    # Create Stream
-    stream_key = "events:user_signups_v2"
-    group_name = "processor-group-1"
-    consumer_name = "worker-1"
-    
-    # Initialize the Backend using Settings
-    connector = ValkeyConnector(
-        host=settings.valkey.HOST, 
-        port=settings.valkey.PORT,
-        password=settings.valkey.PASSWORD
+    # Create Stream with auto-instantiation
+    # It will use Valkey if VALKEY_HOST is set, or fall back to Memory in dev.
+    stream = Stream(
+        topic="events:user_signups_v3",
+        group="signup-processors",
+        schema=UserSignupEvent
     )
-    # Create Backend
-    backend = ValkeyStreamBackend(connector, stream_key, group_name, consumer_name)
     
-    # Initialize the Stream Facade
-    async with Stream(backend, schema=UserSignupEvent) as stream:
-        params = await stream.health()
-        print(f"Stream Health: {params}")
-        
-        # Produce some test data (In a real app, this would be in a separate producer)
+    async with stream:
+        # Produce some test data
         print("Producing test events...")
         for i in range(5):
             evt = UserSignupEvent(
@@ -55,9 +42,8 @@ async def main() -> None:
 
         # Start Processing
         print("Starting processor (Press Ctrl+C to stop)...")
-        # In a real app, this runs indefinitely. 
-        # Here we rely on the loop running until we stop it or it catches the signal.
-        # For demo purposes, we might just run it for a few seconds if we wanted to auto-exit.
+        # run_forever handles both stateless and stateful handlers.
+        # For a single simple handler, we can use run().
         await stream.run(handler=process_user_signup, batch_size=2)
 
 if __name__ == "__main__":

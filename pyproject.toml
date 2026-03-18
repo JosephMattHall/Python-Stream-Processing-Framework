@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "pspf"
-version = "0.1.0-alpha.1"
+version = "0.1.0b1"
 description = "Python Stream Processing Framework"
 readme = "README.md"
 authors = ["Joseph Hall <joseph@josephmatthewhall.com>"]

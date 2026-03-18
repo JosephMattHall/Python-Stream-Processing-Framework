@@ -1,8 +1,10 @@
-from typing import Any, Dict, Optional, Type, Generic, TypeVar, Callable, Awaitable
+from typing import Any, Dict, Optional, Type, Generic, TypeVar, Callable, Awaitable, List
+import os
 from pspf.connectors.base import StreamingBackend
 from pspf.schema import BaseEvent, SchemaRegistry
 from pspf.processor import BatchProcessor
 from pspf.settings import settings
+from pspf.context import Context
 from pspf.telemetry import TelemetryManager
 from pydantic import BaseModel
 from pspf.utils.logging import get_logger
@@ -49,17 +51,32 @@ class Stream(Generic[T]):
                 raise ValueError("Must provide either a 'backend', or both 'topic' and 'group' for auto-instantiation.")
             
             from pspf.settings import settings
-            try:
-                from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
-                import uuid
-                connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
-                worker_id = f"worker-{uuid.uuid4().hex[:8]}"
-                backend = ValkeyStreamBackend(connector, topic, group, worker_id)
-                logger.info(f"Auto-instantiated Valkey backend for topic '{topic}'")
-            except Exception as e:
-                logger.warning(f"Failed to auto-instantiate Valkey backend: {e}. Falling back to MemoryBackend.")
+            
+            # Auto-selection logic
+            use_valkey = False
+            # If VALKEY_HOST is explicitly set to something other than localhost, we assume intent to use it.
+            # Otherwise, we only use it if specifically requested or not in dev.
+            if os.getenv("VALKEY_HOST") or os.getenv("PSPF_BACKEND") == "valkey":
+                use_valkey = True
+            elif settings.ENV != "dev":
+                use_valkey = True
+
+            if use_valkey:
+                try:
+                    from pspf.connectors.valkey import ValkeyConnector, ValkeyStreamBackend
+                    import uuid
+                    connector = ValkeyConnector(host=settings.valkey.HOST, port=settings.valkey.PORT)
+                    worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+                    backend = ValkeyStreamBackend(connector, topic, group, worker_id)
+                    logger.info(f"Auto-instantiated Valkey backend for topic '{topic}'")
+                except Exception as e:
+                    logger.warning(f"Failed to auto-instantiate Valkey backend: {e}. Falling back to MemoryBackend.")
+                    from pspf.connectors.memory import MemoryBackend
+                    backend = MemoryBackend(stream_key=topic, group_name=group)
+            else:
                 from pspf.connectors.memory import MemoryBackend
                 backend = MemoryBackend(stream_key=topic, group_name=group)
+                logger.debug(f"Auto-instantiated MemoryBackend for topic '{topic}' (ENV={settings.ENV})")
 
         self.backend = backend
         self.schema = schema
@@ -234,9 +251,14 @@ class Stream(Generic[T]):
         self.telemetry.inject_context(data)
             
         target_backend = self.backend
+        
+        # Ensure target backend is connected
+        # Most connectors should be idempotent on connect()
+        await target_backend.connect()
+
         if topic and topic != self.backend.stream_key:
             target_backend = self.backend.clone_with_topic(topic)
-            # Depending on backend, might need to ensure connection. For Valkey/Memory it shares the connector.
+            await target_backend.connect()
             
         msg_id = await target_backend.add_event(data)
         return msg_id
@@ -255,14 +277,17 @@ class Stream(Generic[T]):
         Raises:
              Exception: Any unhandled exception from the processor or validation logic.
         """
-        async def typed_handler(msg_id: str, raw_data: Dict[str, Any]) -> None:
-            return await self._create_typed_handler(handler, self.backend.stream_key)(msg_id, raw_data)
+        async def typed_handler(msg_id: str, raw_data: Dict[str, Any], ctx: Context) -> None:
+            return await self._create_typed_handler(handler, self.backend.stream_key)(msg_id, raw_data, ctx)
 
         logger.info(f"Starting stream processor for {self.backend.stream_key}...")
         await self.processor.run_loop(typed_handler, batch_size=batch_size)
 
-    def _create_typed_handler(self, handler: Callable, topic: str) -> Callable[[str, Dict[str, Any]], Awaitable[None]]:
-        async def typed_handler(msg_id: str, raw_data: Dict[str, Any]) -> None:
+    def _create_typed_handler(self, handler: Callable, topic: str) -> Callable[[str, Dict[str, Any], Context], Awaitable[None]]:
+        import inspect
+        sig = inspect.signature(handler)
+        
+        async def typed_handler(msg_id: str, raw_data: Dict[str, Any], ctx: Context) -> None:
             # 1. Deserialize / Validate
             if self.schema:
                 try:
@@ -288,8 +313,13 @@ class Stream(Generic[T]):
                 event.offset = msg_id
             
             # 2. Call User Logic
-            # We explicitly cast event to T (or close enough)
-            await handler(event) # type: ignore
+            # Pass ctx if the user handler accepts it
+            if len(sig.parameters) >= 3:
+                await handler(msg_id, raw_data, ctx)
+            elif len(sig.parameters) == 2:
+                await handler(msg_id, raw_data)
+            else:
+                await handler(event)
         return typed_handler
 
     async def aggregate(self, 
@@ -316,10 +346,10 @@ class Stream(Generic[T]):
         logger.info(f"Starting windowed aggregation processor for {self.backend.stream_key}...")
         await self.processor.run_loop(typed_agg_handler, batch_size=batch_size)
 
-    def _create_aggregation_handler(self, handler: Callable, topic: str, window: Window, watermark_delay_ms: int, backend: StreamingBackend) -> Callable[[str, Dict[str, Any]], Awaitable[None]]:
+    def _create_aggregation_handler(self, handler: Callable, topic: str, window: Window, watermark_delay_ms: int, backend: StreamingBackend) -> Callable[[str, Dict[str, Any], Context], Awaitable[None]]:
         max_event_ts = 0.0
 
-        async def aggregation_handler(msg_id: str, raw_data: Dict[str, Any]) -> None:
+        async def aggregation_handler(msg_id: str, raw_data: Dict[str, Any], ctx: Context) -> None:
             nonlocal max_event_ts
             # 1. Deserialize / Validate (similar to run_loop)
             if self.schema:

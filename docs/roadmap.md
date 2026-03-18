@@ -13,7 +13,7 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 - **[x] Durable Retry Tracking**:
     - Refactor `KafkaStreamBackend` to store retry counters in the `StateStore` instead of in-memory.
     - Ensure message retry state survives worker restarts.
-- **[ ] Idempotent Sinks**:
+- **[x] Idempotent Sinks**:
     - Provide a standard `BaseSink` that enforces idempotency tokens for external side-effects (API calls, DB writes).
 
 ## Phase 2: High-Performance Connectivity (Interop)
@@ -45,4 +45,4 @@ This roadmap outlines the evolution of PSPF from a functional framework to an en
 ## Evaluation Metrics
 - **Data Loss Rate**: Zero (Verified via Chaos testing).
 - **Startup Time**: < 1s (Delayed Admin start).
-- **Security Compliance**: No `pickle` usage in production paths (Completed).
+

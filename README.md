@@ -8,6 +8,8 @@ It is designed for building event-driven applications, event sourcing systems, a
 
 - **Auto-Instantiation:** Simply provide a topic and group; PSPF handles backend setup automatically (Valkey with Memory fallback).
 - **Decorator API:** Simple `@stream.subscribe` and `@stream.window` handlers for rapid development.
+- **Durable Retries:** Message retry state is persisted in a `StateStore`, surviving worker restarts.
+- **Idempotent Sinks:** Built-in `BaseSink` for external side-effects (APIs, DBs) with automatic idempotency tokens.
 - **Exactly-Once Semantics:** Atomic transactions where state and offsets are committed together.
 - **Reliability & DLQ:** Built-in retries and Dead Letter Queues (DLQ) for failed or late events.
 - **Zero-Downtime Scaling:** Automatic partition rebalancing across worker clusters.

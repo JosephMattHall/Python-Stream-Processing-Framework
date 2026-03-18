@@ -1,7 +1,7 @@
 import asyncio
 import time
 from pspf.stream import Stream
-from pspf.connectors.memory import MemoryBackend
+
 
 async def main():
     # 1. Create a Stream using topic and group.

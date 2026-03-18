@@ -1,5 +1,81 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any, Optional
+from pspf.schema import BaseEvent
+from pspf.state.store import StateStore
+
+class Source(ABC):
+    """Abstract base class for data sources."""
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    async def start(self) -> None:
+        pass
+
+    @abstractmethod
+    async def stop(self) -> None:
+        pass
+
+class Sink(ABC):
+    """Abstract base class for data sinks."""
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    async def start(self) -> None:
+        pass
+
+    @abstractmethod
+    async def stop(self) -> None:
+        pass
+
+class BaseSink(Sink):
+    """
+    Standard Sink implementation with built-in idempotency tracking.
+    Users should implement `on_write` instead of `write`.
+    """
+    def __init__(self, name: str, state_store: StateStore, ttl_seconds: int = 86400):
+        super().__init__(name)
+        self.state_store = state_store
+        self.ttl_seconds = ttl_seconds
+
+    async def start(self) -> None:
+        await self.state_store.start()
+
+    async def stop(self) -> None:
+        await self.state_store.stop()
+
+    def generate_token(self, event: BaseEvent) -> str:
+        """
+        Generate a unique idempotency token for the event.
+        Uses event_id by default.
+        """
+        return f"pspf:sink:{self.name}:{event.event_id}"
+
+    async def write(self, event: BaseEvent) -> None:
+        """
+        Public entry point for writing events.
+        Enforces idempotency using the StateStore.
+        """
+        token = self.generate_token(event)
+        
+        # Check if already processed
+        if await self.state_store.get(token):
+            return
+            
+        # Execute side effect
+        await self.on_write(event, token)
+        
+        # Record success
+        await self.state_store.put(token, True, ttl_seconds=self.ttl_seconds)
+
+    @abstractmethod
+    async def on_write(self, event: BaseEvent, idempotency_token: str) -> None:
+        """
+        Actual implementation of the side effect.
+        Must be implemented by subclasses.
+        """
+        pass
 
 class StreamingBackend(ABC):
     """

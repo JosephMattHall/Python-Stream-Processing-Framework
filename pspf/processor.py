@@ -48,6 +48,7 @@ class BatchProcessor:
         self.tracer = self.telemetry.get_tracer()
         self._paused = False
         self._start_admin = start_admin_server
+        self._shutdown_requested = False
         self._background_tasks = set()
 
     def pause(self) -> None:
@@ -95,7 +96,7 @@ class BatchProcessor:
                 logger.warning("Shutdown timed out, forcing exit.")
 
     async def run_loop(self, 
-                       handler: Callable[[str, Dict[str, Any]], Awaitable[None]], 
+                       handler: Callable[[str, Dict[str, Any], Context], Awaitable[None]], 
                        batch_size: int = 10, 
                        poll_interval: float = 0.1) -> None:
         """
@@ -306,17 +307,16 @@ class BatchProcessor:
                         logger.debug(f"Skipping already processed message {msg_id} (Checkpoint: {last_id})")
                         return True # Count as success so it gets ACKed in Valkey
                 
-                # Inspect handler signature to see if it wants context
-
+                # Invoke handler with Context if requested
+                processing_ctx = Context(state=self.state_store)
+                
+                # Check if handler accepts 3 arguments (msg_id, data, ctx)
                 sig = inspect.signature(handler)
                 
                 async def invoke_handler() -> None:
                     if len(sig.parameters) >= 3:
-                        # Stateful: handler(msg_id, data, ctx)
-                        processing_ctx = Context(state=self.state_store)
                         await handler(msg_id, data, processing_ctx)
                     else:
-                        # Stateless: handler(msg_id, data)
                         await handler(msg_id, data)
 
                 if self.state_store:

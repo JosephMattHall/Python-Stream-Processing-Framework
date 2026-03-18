@@ -126,7 +126,6 @@ Create a file named `memory_tutorial.py`:
 import asyncio
 import uuid
 from pspf import Stream
-from pspf.connectors.memory import MemoryBackend
 from schema import OrderCreated
 
 async def main():
