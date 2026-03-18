@@ -1,5 +1,5 @@
 site_name: PSPF - Python Stream Processing Framework
-site_url: https://NONEyet.com/pspf
+site_url: https://docs.pspf.dev
 site_description: Enterprise-ready stream processing with Python and Valkey.
 repo_url: https://github.com/JosephMattHall/Python-Stream-Processing-Framework
 
